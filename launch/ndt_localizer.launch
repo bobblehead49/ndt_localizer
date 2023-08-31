@@ -1,0 +1,48 @@
+<launch>
+    <arg name="maps_directory" default="$(env HOME)"/>
+    <arg name="map_name" default="map"/>    
+    <arg name="map_frame" default="map"/>
+    <arg name="base_frame" default="base_link"/>
+    <arg name="lidar_frame" default="lidar"/>
+    <arg name="points_topic" default="/lidar_points"/>
+    <arg name="odom_topic" default="/odom"/>
+    <arg name="min_scan_range" default="0.3"/>
+    <arg name="max_scan_range" default="100.0"/>
+    <arg name="voxel_leaf_size" default="0.5"/>
+    <arg name="ndt_max_iterations" default="30"/>
+    <arg name="ndt_resolution" default="2.0"/>
+    <arg name="ndt_step_size" default="0.1"/>
+    <arg name="ndt_transformation_epsilon" default="0.001"/>
+    <arg name="prediction_method" default="odom"/>
+    <arg name="translation_error_tolerance" default="0.8"/>
+    <arg name="rotation_error_tolerance" default="8.0"/>
+    <arg name="use_submaps" default="true"/>
+    <arg name="submap_include_distance" default="30.0"/>
+    <arg name="submap_update_shift" default="5.0"/>
+    <arg name="use_rviz" default="true"/>
+
+    <node pkg="rviz" type="rviz" name="rviz" args="-d $(find ndt_localizer)/config/localization.rviz" if="$(arg use_rviz)" />
+
+    <node pkg="ndt_localizer" type="ndt_localizer" name="ndt_localizer" output="screen" >
+        <param name="maps_directory" value="$(arg maps_directory)"/>
+        <param name="map_name" value="$(arg map_name)"/>
+        <param name="map_frame" value="$(arg map_frame)"/>
+        <param name="base_frame" value="$(arg base_frame)"/>
+        <param name="lidar_frame" value="$(arg lidar_frame)"/>
+        <param name="points_topic" value="$(arg points_topic)"/>
+        <param name="odom_topic" value="$(arg odom_topic)"/>
+        <param name="min_scan_range" value="$(arg min_scan_range)"/>
+        <param name="max_scan_range" value="$(arg max_scan_range)"/>
+        <param name="voxel_leaf_size" value="$(arg voxel_leaf_size)"/>
+        <param name="ndt_max_iterations" value="$(arg ndt_max_iterations)"/>
+        <param name="ndt_resolution" value="$(arg ndt_resolution)"/>
+        <param name="ndt_step_size" value="$(arg ndt_step_size)"/>
+        <param name="ndt_transformation_epsilon" value="$(arg ndt_transformation_epsilon)"/>
+        <param name="prediction_method" value="$(arg prediction_method)"/>
+        <param name="translation_error_tolerance" value="$(arg translation_error_tolerance)"/>
+        <param name="rotation_error_tolerance" value="$(arg rotation_error_tolerance)"/>
+        <param name="use_submaps" value="$(arg use_submaps)"/>
+        <param name="submap_include_distance" value="$(arg submap_include_distance)"/>
+        <param name="submap_update_shift" value="$(arg submap_update_shift)"/>
+    </node>
+</launch>

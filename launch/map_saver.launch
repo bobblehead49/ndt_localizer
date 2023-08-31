@@ -1,0 +1,10 @@
+<launch>
+    <arg name="maps_directory" default="$(env HOME)"/>
+    <arg name="map_name" default="map"/>
+
+    <node pkg="ndt_localizer" type="map_saver" name="map_saver" output="screen" >
+        <param name="maps_directory" value="$(arg maps_directory)"/>
+        <param name="map_name" value="$(arg map_name)"/>
+    </node>
+
+</launch>

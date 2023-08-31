@@ -1,0 +1,65 @@
+<launch>
+    <arg name="map_frame" default="map"/>
+    <arg name="base_frame" default="base_link"/>
+    <arg name="lidar_frame" default="lidar"/>
+    <arg name="points_topic" default="/lidar_points"/>
+    <arg name="odom_topic" default="/odom"/>
+    <arg name="map_topic" default="/map"/>
+    <arg name="map_publish_interval" default="15.0"/>
+    <arg name="min_scan_range" default="0.3"/>
+    <arg name="max_scan_range" default="100.0"/>
+    <arg name="voxel_leaf_size" default="0.5"/>
+    <arg name="ndt_max_iterations" default="30"/>
+    <arg name="ndt_resolution" default="2.0"/>
+    <arg name="ndt_step_size" default="0.1"/>
+    <arg name="ndt_translation_epsilon" default="0.001"/>
+    <arg name="prediction_method" default="odom"/> <!-- zero, linear or odom -->
+    <arg name="translation_error_tolerance" default="0.8"/>
+    <arg name="rotation_error_tolerance" default="8.0"/>
+    <arg name="map_add_shift" default="1.0"/>
+    <arg name="submap_scan_size" default="1"/>
+    <arg name="submap_include_distance" default="30.0"/>
+    <arg name="submap_connect_distance" default="5.0"/>
+    <arg name="use_loop_closure" default="true"/>
+    <arg name="loop_connect_distance" default="15.0"/>
+    <arg name="loop_closure_confirmation_error" default="0.05"/>
+    <arg name="save_uncompressed_map" default="false"/>
+    <arg name="save_submaps" default="true"/>
+    <arg name="use_rviz" default="true"/>
+
+    <node pkg="rviz" type="rviz" name="rviz" args="-d $(find ndt_localizer)/config/mapping.rviz" if="$(arg use_rviz)" />
+
+    <node pkg="ndt_localizer" type="ndt_mapper" name="ndt_mapper" output="screen" >
+        <param name="map_frame" value="$(arg map_frame)"/>
+        <param name="base_frame" value="$(arg base_frame)"/>
+        <param name="lidar_frame" value="$(arg lidar_frame)"/>
+        <param name="points_topic" value="$(arg points_topic)"/>
+        <param name="odom_topic" value="$(arg odom_topic)"/>
+        <param name="map_topic" value="$(arg map_topic)"/>
+        <param name="map_publish_interval" value="$(arg map_publish_interval)"/>
+        <param name="min_scan_range" value="$(arg min_scan_range)"/>
+        <param name="max_scan_range" value="$(arg max_scan_range)"/>
+        <param name="voxel_leaf_size" value="$(arg voxel_leaf_size)"/>
+        <param name="ndt_max_iterations" value="$(arg ndt_max_iterations)"/>
+        <param name="ndt_resolution" value="$(arg ndt_resolution)"/>
+        <param name="ndt_step_size" value="$(arg ndt_step_size)"/>
+        <param name="ndt_translation_epsilon" value="$(arg ndt_translation_epsilon)"/>
+        <param name="prediction_method" value="$(arg prediction_method)"/>
+        <param name="translation_error_tolerance" value="$(arg translation_error_tolerance)"/>
+        <param name="rotation_error_tolerance" value="$(arg rotation_error_tolerance)"/>
+        <param name="map_add_shift" value="$(arg map_add_shift)"/>
+        <param name="submap_scan_size" value="$(arg submap_scan_size)"/>
+        <param name="submap_include_distance" value="$(arg submap_include_distance)"/>
+        <param name="submap_connect_distance" value="$(arg submap_connect_distance)"/>
+        <param name="use_loop_closure" value="$(arg use_loop_closure)"/>
+        <param name="loop_connect_distance" value="$(arg loop_connect_distance)"/>
+        <param name="loop_closure_confirmation_error" value="$(arg loop_closure_confirmation_error)"/>
+        <param name="save_uncompressed_map" value="$(arg save_uncompressed_map)"/>
+        <param name="save_submaps" value="$(arg save_submaps)"/>
+    </node>
+
+    <node pkg="ndt_localizer" type="ndt_logger" name="ndt_logger" output="screen" >
+        <param name="queue_topic" value="$(arg points_topic)"/>
+        <param name="deque_topic" value="/ndt_mapper/deque"/>
+    </node>
+</launch>
