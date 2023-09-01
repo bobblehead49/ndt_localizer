@@ -1,10 +1,16 @@
 # ndt_localizer
 
 ## Overview
-This package is for 3D mapping and localization using NDT (normal-distributions transform).
-Includes a cheap edition of loop closure without any total optimization.  
+This package is for **3D mapping and localization using NDT** (normal-distributions transform).
+Includes a cheap edition of **loop closure** without any total optimization.  
 
-This package has been developed and tested under ROS noetic on Ubuntu 20.04.  
+This package has been developed and tested under **ROS noetic** on **Ubuntu 20.04**.  
+
+### Demo video of 3D mapping and loop closure 
+
+https://github.com/bobblehead49/ndt_localizer/assets/85610470/6e9ebc63-43fb-465c-b07b-4efb202852db
+
+---
 
 ## Usage
 
