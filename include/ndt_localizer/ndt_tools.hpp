@@ -12,6 +12,7 @@
 
 #include <geometry_msgs/TransformStamped.h>
 #include <geometry_msgs/Twist.h>
+#include <nav_msgs/Odometry.h>
 
 #include <tf2_ros/transform_listener.h>
 
@@ -50,6 +51,7 @@ Eigen::Matrix4f convert_tf2matrix(const geometry_msgs::TransformStamped&);
 geometry_msgs::TransformStamped convert_matrix2tf(const Eigen::Matrix4f&);
 Pose convert_matrix2pose(const Eigen::Matrix4f&);
 Eigen::Matrix4f convert_pose2matrix(const Pose&);
+Eigen::Matrix4f convert_odom2matrix(const nav_msgs::Odometry&);
 Pose get_linear_prediction_pose(const Pose&, const geometry_msgs::Twist&, const double);
 std::unordered_set<int> get_neighbor_ids(const std::map<int, SubmapWithInfo>&, const float);
 void apply_range_filter(const pcl::PointCloud<pcl::PointXYZI>::Ptr&, pcl::PointCloud<pcl::PointXYZI>::Ptr&, const float, const float);

@@ -49,7 +49,6 @@ private:
     ros::Publisher deque_pub_;
 
     ros::Time last_scan_stamp_;
-    ros::Time last_predicted_stamp_;
     ros::Time last_map_publish_stamp_;
 
     tf2_ros::Buffer tf_buffer_;
@@ -57,6 +56,8 @@ private:
     tf2_ros::TransformBroadcaster tf_broadcaster_;
 
     geometry_msgs::Twist last_base_twist_;
+
+    nav_msgs::Odometry last_odom_;
 
     std::string map_frame_;
     std::string base_frame_;
@@ -108,16 +109,16 @@ private:
 
     PredictionMethod prediction_method_;
 
-    std::unordered_set<int> get_locally_connected_ids(const float);
+    std::unordered_set<int> get_locally_connected_ids(const int, const float);
     void group_submaps(const std::unordered_set<int>&);
     std::unordered_set<int> get_loop_target_ids(const std::unordered_set<int>&);
-    Eigen::Matrix4f get_loop_error(const std::unordered_set<int>&);
+    void get_loop_error(const std::unordered_set<int>&, Eigen::Matrix4f&, float&, bool&);
     std::vector<int> get_loop_id_path(const std::unordered_set<int>&, const int);
     std::vector<int> get_grouped_loop_id_path(const std::vector<int>&);
-    void adjust_angles(const Pose&, const std::vector<int>&, const std::vector<int>&, std::map<int, Eigen::Matrix4f>&);
-    void adjust_positions(const Pose&, const std::vector<int>&, const std::vector<int>&, std::map<int, Eigen::Matrix4f>&);
+    void adjust_angles(const Pose&, std::map<int, Eigen::Matrix4f>&);
+    void adjust_positions(const Pose&, std::map<int, Eigen::Matrix4f>&);
     void shift_submaps(const std::map<int, Eigen::Matrix4f>&);
-    Pose close_loop(const std::unordered_set<int>&);
+    bool close_loop(const std::unordered_set<int>&, Pose&);
     void update_maps(const pcl::PointCloud<pcl::PointXYZI>::Ptr&, const Eigen::Matrix4f&, Pose&);
     void odom_callback(const nav_msgs::OdometryConstPtr&);
     void points_callback(const sensor_msgs::PointCloud2ConstPtr&);

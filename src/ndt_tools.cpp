@@ -14,6 +14,7 @@
 
 #include <geometry_msgs/TransformStamped.h>
 #include <geometry_msgs/Twist.h>
+#include <nav_msgs/Odometry.h>
 #include <sensor_msgs/PointCloud2.h>
 
 #include <tf2_ros/transform_listener.h>
@@ -114,6 +115,14 @@ Eigen::Matrix4f convert_pose2matrix(const Pose& pose)
     return (translation * rotation_z * rotation_y * rotation_x).matrix();
 }
 
+// Converts odometry to eigen transform matrix.
+Eigen::Matrix4f convert_odom2matrix(const nav_msgs::Odometry& odom)
+{
+    Eigen::Translation3f translation(odom.pose.pose.position.x, odom.pose.pose.position.y, odom.pose.pose.position.z);
+    Eigen::Quaternionf quaternion(odom.pose.pose.orientation.w, odom.pose.pose.orientation.x, odom.pose.pose.orientation.y, odom.pose.pose.orientation.z);
+    return (translation * quaternion).matrix();
+}
+
 // Get linear prediction of next pose based on twist.
 Pose get_linear_prediction_pose(const Pose& current_pose, const geometry_msgs::Twist& twist, const double dt)
 {
@@ -168,7 +177,7 @@ void apply_range_filter(const pcl::PointCloud<pcl::PointXYZI>::Ptr& scan, pcl::P
         float range_squared;
         range_squared = it->x * it->x + it->y * it->y + it->z * it->z;
         if (range_squared < max_scan_range * max_scan_range
-            || range_squared > min_scan_range * min_scan_range)
+            && range_squared > min_scan_range * min_scan_range)
             scan_filtered->push_back(*it);
     }
 }
@@ -250,10 +259,9 @@ void update_submap_distances(const Pose& current_pose, std::map<int, SubmapWithI
 {
     for (auto& submap_with_info : submap_map)
     {
-        double diff_x, diff_y, diff_z;
+        double diff_x, diff_y;
         diff_x = current_pose.x - submap_with_info.second.position_matrix(0, 3);
         diff_y = current_pose.y - submap_with_info.second.position_matrix(1, 3);
-        diff_z = current_pose.z - submap_with_info.second.position_matrix(2, 3);
-        submap_with_info.second.distance = sqrt(diff_x * diff_x + diff_y * diff_y + diff_z * diff_z);
+        submap_with_info.second.distance = sqrt(diff_x * diff_x + diff_y * diff_y);
     }
 }
