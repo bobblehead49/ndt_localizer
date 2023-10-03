@@ -52,11 +52,9 @@ target_link_libraries(ndt_mapper
 target_link_libraries(ndt_logger
   ${catkin_LIBRARIES}
 )
-
 target_link_libraries(map_saver
   ${catkin_LIBRARIES}
 )
-
 target_link_libraries(ndt_tools
   ${PCL_LIBRARIES}
 )
