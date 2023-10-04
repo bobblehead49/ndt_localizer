@@ -109,8 +109,8 @@ NDTMapper::NDTMapper() : nh_(), pnh_("~"), tf_listener_(tf_buffer_)
     odom_sub_ = nh_.subscribe(odom_topic_, 1000000, &NDTMapper::odom_callback, this);
     map_save_request_sub_ = nh_.subscribe("/ndt_mapper/map_save_request", 1, &NDTMapper::map_save_request_callback, this);
     map_pub_ = nh_.advertise<sensor_msgs::PointCloud2>(map_topic_, 1, true);
-    target_map_pub_ = nh_.advertise<sensor_msgs::PointCloud2>("/ndt_mapper/target_map", 1);
-    points_pub_ = nh_.advertise<sensor_msgs::PointCloud2>("/ndt_mapper/points", 1);
+    target_map_pub_ = nh_.advertise<sensor_msgs::PointCloud2>("/ndt_mapper/target_map", 1, true);
+    points_pub_ = nh_.advertise<sensor_msgs::PointCloud2>("/ndt_mapper/points", 1, true);
     convergence_pub_ = nh_.advertise<std_msgs::Bool>("/ndt_mapper/convergence", 1);
     fitness_score_pub_ = nh_.advertise<std_msgs::Float32>("/ndt_mapper/fitness_score", 1);
     num_iteration_pub_ = nh_.advertise<std_msgs::Int32>("/ndt_mapper/iteration_num", 1);
@@ -216,19 +216,19 @@ std::unordered_set<int> NDTMapper::get_loop_target_ids(const std::unordered_set<
 }
 
 // Apply loop closure to the given submaps.
-void NDTMapper::get_loop_error(const std::unordered_set<int>& loop_target_id_set, Eigen::Matrix4f& error_matrix, float& fitness_score, bool& convergence)
+void NDTMapper::get_loop_correction(const std::unordered_set<int>& loop_target_id_set, Eigen::Matrix4f& correction_matrix, float& fitness_score, bool& convergence, Pose& initial_guess_correction)
 {
     // Set target map
     pcl::PointCloud<pcl::PointXYZI> target_cloud;
     for (auto id : loop_target_id_set)
-    {
         target_cloud.operator+=(submap_map_[id].points);
-    }
     ndt_.setInputTarget(target_cloud.makeShared());
 
     // Set source map
+    pcl::PointCloud<pcl::PointXYZI> source_cloud;
+    source_cloud = submap_map_[current_submap_id_].points;
     pcl::PointCloud<pcl::PointXYZI>::Ptr source_voxel_filtered(new pcl::PointCloud<pcl::PointXYZI>);
-    apply_voxel_grid_filter(submap_map_[current_submap_id_].points.makeShared(), source_voxel_filtered, voxel_leaf_size_);
+    apply_voxel_grid_filter(source_cloud.makeShared(), source_voxel_filtered, voxel_leaf_size_);
     ndt_.setInputSource(source_voxel_filtered);
 
     // Get closest loop target id
@@ -244,30 +244,68 @@ void NDTMapper::get_loop_error(const std::unordered_set<int>& loop_target_id_set
         }
     }
 
-    // Prepare base initial guess
-    float dz;
-    Eigen::Matrix4f source_map2lidar_matrix, target_map2lidar_matrix, base_initial_guess;
-    source_map2lidar_matrix = submap_map_[current_submap_id_].position_matrix * base2lidar_matrix_;
-    source_map2lidar_matrix.block<3, 3>(0, 0) = Eigen::Matrix3f::Identity();
-    target_map2lidar_matrix = submap_map_[closest_loop_target_id].position_matrix * base2lidar_matrix_;
-    target_map2lidar_matrix.block<3, 3>(0, 0) = Eigen::Matrix3f::Identity();
-    // base_initial_guess = target_map2lidar_matrix * source_map2lidar_matrix.inverse();
-    dz = target_map2lidar_matrix(2, 3) - source_map2lidar_matrix(2, 3);
-    base_initial_guess = Eigen::Matrix4f::Identity();
-    base_initial_guess(2, 3) = dz;
+    // Prepare relative matrix
+    Eigen::Matrix4f source_translation_matrix, source_orientation_matrix, target_translation_matrix, target_orientation_matrix, relative_matrix;
+    source_translation_matrix = source_orientation_matrix = \
+        submap_map_[current_submap_id_].position_matrix * base2lidar_matrix_;
+    source_translation_matrix.block<3, 3>(0, 0) = Eigen::Matrix3f::Identity();
+    source_orientation_matrix.block<3, 1>(0, 3) = Eigen::Vector3f::Zero();
+    target_translation_matrix = target_orientation_matrix = \
+        submap_map_[closest_loop_target_id].position_matrix * base2lidar_matrix_;
+    target_translation_matrix.block<3, 3>(0, 0) = Eigen::Matrix3f::Identity();
+    target_orientation_matrix.block<3, 1>(0, 3) = Eigen::Vector3f::Zero();
+    relative_matrix = source_translation_matrix.inverse() * target_translation_matrix * source_orientation_matrix.inverse() * target_orientation_matrix;
 
-    // Print matrices
-    ROS_INFO_STREAM("source_map2lidar_matrix:\n" << source_map2lidar_matrix);
-    ROS_INFO_STREAM("target_map2lidar_matrix:\n" << target_map2lidar_matrix);
-    ROS_INFO_STREAM("base_initial_guess:\n" << base_initial_guess);
+    // Get relative pose
+    Pose relative_pose = convert_matrix2pose(relative_matrix);    
 
-    std::vector<Eigen::Matrix4f> error_matrix_vector;
+    // Prepare orientation matrix
+    Eigen::Vector4f target_z_axis = \
+        target_orientation_matrix * Eigen::Vector4f::UnitZ();
+    Eigen::Matrix3f rotation_matrix_3x3 = \
+        Eigen::AngleAxisf(-relative_pose.yaw, target_z_axis.head<3>()).toRotationMatrix();
+    Eigen::Matrix4f rotation_matrix = Eigen::Matrix4f::Identity();
+    rotation_matrix.block<3, 3>(0, 0) = rotation_matrix_3x3;
+
+    // Prepare main initial guess
+    Eigen::Matrix4f main_initial_guess = \
+        source_orientation_matrix.inverse() * rotation_matrix * target_orientation_matrix;
+    main_initial_guess(2, 3) = relative_matrix(2, 3);
+
+    // Publish tf
+    Eigen::Matrix4f map2main_initial_guess_matrix;
+    map2main_initial_guess_matrix = source_translation_matrix * rotation_matrix * target_orientation_matrix;
+    map2main_initial_guess_matrix(2, 3) += relative_matrix(2, 3);
+    geometry_msgs::TransformStamped map2main_initial_guess_tf;
+    map2main_initial_guess_tf = convert_matrix2tf(map2main_initial_guess_matrix);
+    map2main_initial_guess_tf.header.stamp = ros::Time::now();
+    map2main_initial_guess_tf.header.frame_id = map_frame_;
+    map2main_initial_guess_tf.child_frame_id = "main_initial_guess";
+    tf_broadcaster_.sendTransform(map2main_initial_guess_tf);
+
+    geometry_msgs::TransformStamped target_tf;
+    target_tf = convert_matrix2tf(target_translation_matrix * target_orientation_matrix);
+    target_tf.header.stamp = ros::Time::now();
+    target_tf.header.frame_id = map_frame_;
+    target_tf.child_frame_id = "target";
+    tf_broadcaster_.sendTransform(target_tf);
+
+    // Print pose
+    Pose source_pose, target_pose, initial_guess_pose;
+    source_pose = convert_matrix2pose(source_translation_matrix * source_orientation_matrix);
+    target_pose = convert_matrix2pose(target_translation_matrix * target_orientation_matrix);
+    initial_guess_pose = convert_matrix2pose(main_initial_guess);
+    ROS_INFO("source_pose:\n (x, y, z, roll, pitch, yaw): (%.3f, %.3f, %.3f, %.3f, %.3f, %.3f)", source_pose.x, source_pose.y, source_pose.z, source_pose.roll*180.0/M_PI, source_pose.pitch*180.0/M_PI, source_pose.yaw*180.0/M_PI);
+    ROS_INFO("target_pose:\n (x, y, z, roll, pitch, yaw): (%.3f, %.3f, %.3f, %.3f, %.3f, %.3f)", target_pose.x, target_pose.y, target_pose.z, target_pose.roll*180.0/M_PI, target_pose.pitch*180.0/M_PI, target_pose.yaw*180.0/M_PI);
+    ROS_INFO("initial_guess_pose:\n (x, y, z, roll, pitch, yaw): (%.3f, %.3f, %.3f, %.3f, %.3f, %.3f)", initial_guess_pose.x, initial_guess_pose.y, initial_guess_pose.z, initial_guess_pose.roll*180.0/M_PI, initial_guess_pose.pitch*180.0/M_PI, initial_guess_pose.yaw*180.0/M_PI);
+
+    std::vector<Eigen::Matrix4f> correction_matrix_vector;
     std::vector<float> fitness_score_vector;
     std::vector<bool> convergence_vector;
-    Eigen::Matrix4f best_fit_error_matrix = Eigen::Matrix4f::Identity();
+    Eigen::Matrix4f best_fit_correction_matrix = Eigen::Matrix4f::Identity();
     float best_fit_score = std::numeric_limits<float>::max();
     bool best_fit_convergence = false;
-    for (int i = 0; i < 6; i++)
+    for (int i = 0; i < 1; i++)
     {
         ROS_INFO("Loop closure trial: %d", i);
 
@@ -277,17 +315,12 @@ void NDTMapper::get_loop_error(const std::unordered_set<int>& loop_target_id_set
         {
             for (int y=-i ; y<=i ; y++)
             {
-                for (int z=-1 ; z<=1 ; z++)
+                if (x == i || y == i || x == -i || y == -i)
                 {
-                    if (x == i || y == i || x == -i || y == -i)
-                    {
-                        Eigen::Matrix4f initial_guess;
-                        initial_guess = Eigen::Matrix4f::Identity();
-                        initial_guess(0, 3) = base_initial_guess(0, 3) + 1.0 * x;
-                        initial_guess(1, 3) = base_initial_guess(1, 3) + 1.0 * y;
-                        initial_guess(2, 3) = base_initial_guess(2, 3) + 0.5 * z;
-                        initial_guess_vector.push_back(initial_guess);
-                    }
+                    Eigen::Matrix4f initial_guess = main_initial_guess;
+                    initial_guess(0, 3) += 1.0 * x;
+                    initial_guess(1, 3) += 1.0 * y;
+                    initial_guess_vector.push_back(initial_guess);
                 }
             }
         }
@@ -297,8 +330,21 @@ void NDTMapper::get_loop_error(const std::unordered_set<int>& loop_target_id_set
         for (auto initial_guess : initial_guess_vector)
         {
             if (!ros::ok()) break;
+
+            Eigen::Matrix4f map2initial_guess_matrix, initial_guess_translation_matrix, initial_guess_orientation_matrix;
+            initial_guess_translation_matrix = initial_guess_orientation_matrix = initial_guess;
+            initial_guess_translation_matrix.block<3, 3>(0, 0) = Eigen::Matrix3f::Identity();
+            initial_guess_orientation_matrix.block<3, 1>(0, 3) = Eigen::Vector3f::Zero();
+            map2initial_guess_matrix = source_translation_matrix * initial_guess_translation_matrix * source_orientation_matrix * initial_guess_orientation_matrix;
+            geometry_msgs::TransformStamped map2initial_guess_tf;
+            map2initial_guess_tf = convert_matrix2tf(map2initial_guess_matrix);
+            map2initial_guess_tf.header.stamp = ros::Time::now();
+            map2initial_guess_tf.header.frame_id = map_frame_;
+            map2initial_guess_tf.child_frame_id = "initial_guess";
+            tf_broadcaster_.sendTransform(map2initial_guess_tf);
+
             ndt_.align(*scan_aligned, initial_guess);
-            error_matrix_vector.push_back(ndt_.getFinalTransformation());
+            correction_matrix_vector.push_back(ndt_.getFinalTransformation());
             fitness_score_vector.push_back(ndt_.getFitnessScore());
             convergence_vector.push_back(ndt_.hasConverged());
             std::cout << "." << std::flush;
@@ -309,20 +355,24 @@ void NDTMapper::get_loop_error(const std::unordered_set<int>& loop_target_id_set
         // Get stats
         float best_fit_idx = \
             std::distance(fitness_score_vector.begin(), std::min_element(fitness_score_vector.begin(), fitness_score_vector.end()));
-        best_fit_error_matrix = error_matrix_vector[best_fit_idx];
+        best_fit_correction_matrix = correction_matrix_vector[best_fit_idx];
         best_fit_score = fitness_score_vector[best_fit_idx];
         best_fit_convergence = convergence_vector[best_fit_idx];
 
         ROS_INFO("Best fitness score: %.3f", best_fit_score);
-        ROS_INFO_STREAM("Best fit error matrix:\n" << best_fit_error_matrix);
+        ROS_INFO_STREAM("Best fit correction matrix:\n" << best_fit_correction_matrix);
         ROS_INFO("Best fit convergence: %s", best_fit_convergence ? "true" : "false");
 
-        if (best_fit_score < 0.4) break;
+        if (best_fit_score < 0.4 || best_fit_score > 1000.0) break;
     }
 
-    error_matrix = best_fit_error_matrix;
+    // Get best fit stats
+    correction_matrix = best_fit_correction_matrix;
     fitness_score = best_fit_score;
     convergence = best_fit_convergence;
+
+    // Get error from initial guess
+    initial_guess_correction = convert_matrix2pose(correction_matrix * main_initial_guess.inverse());
 }
 
 // Get node id path from start to goal.
@@ -364,15 +414,15 @@ std::vector<int> NDTMapper::get_grouped_loop_id_path(const std::vector<int>& loo
     return grouped_loop_id_path;
 }
 
-void NDTMapper::adjust_angles(const Pose& loop_error_pose, std::map<int, Eigen::Matrix4f>& destination_matrix_map)
+void NDTMapper::adjust_angles(const Pose& loop_correction_pose, std::map<int, Eigen::Matrix4f>& destination_matrix_map)
 {
     // Get rotation matrix
     Pose rotation_pose;
     Eigen::Matrix4f rotation_matrix;
     rotation_pose.x = rotation_pose.y = rotation_pose.z = 0.0;
-    rotation_pose.roll = loop_error_pose.roll / (destination_matrix_map.size()-1);
-    rotation_pose.pitch = loop_error_pose.pitch / (destination_matrix_map.size()-1);
-    rotation_pose.yaw = loop_error_pose.yaw / (destination_matrix_map.size()-1);
+    rotation_pose.roll = loop_correction_pose.roll / (destination_matrix_map.size()-1);
+    rotation_pose.pitch = loop_correction_pose.pitch / (destination_matrix_map.size()-1);
+    rotation_pose.yaw = loop_correction_pose.yaw / (destination_matrix_map.size()-1);
     rotation_matrix = convert_pose2matrix(rotation_pose);
 
     // Rotate all destination matrices
@@ -392,14 +442,14 @@ void NDTMapper::adjust_angles(const Pose& loop_error_pose, std::map<int, Eigen::
     }
 }
 
-void NDTMapper::adjust_positions(const Pose& loop_error_pose, std::map<int, Eigen::Matrix4f>& destination_matrix_map)
+void NDTMapper::adjust_positions(const Pose& loop_correction_pose, std::map<int, Eigen::Matrix4f>& destination_matrix_map)
 {
     // Get translation matrix
     Eigen::Matrix4f translation_matrix;
     translation_matrix = Eigen::Matrix4f::Identity();
-    translation_matrix(0, 3) = loop_error_pose.x / (destination_matrix_map.size()-1);
-    translation_matrix(1, 3) = loop_error_pose.y / (destination_matrix_map.size()-1);
-    translation_matrix(2, 3) = loop_error_pose.z / (destination_matrix_map.size()-1);
+    translation_matrix(0, 3) = loop_correction_pose.x / (destination_matrix_map.size()-1);
+    translation_matrix(1, 3) = loop_correction_pose.y / (destination_matrix_map.size()-1);
+    translation_matrix(2, 3) = loop_correction_pose.z / (destination_matrix_map.size()-1);
 
     // Translate all destination matrices
     for (auto it = destination_matrix_map.begin(); it != destination_matrix_map.end(); it++)
@@ -416,17 +466,18 @@ void NDTMapper::shift_submaps(const std::map<int, Eigen::Matrix4f>& destination_
     for (auto it = destination_matrix_map.begin(); it != destination_matrix_map.end(); it++)
     {
         int submap_id;
-        Eigen::Matrix4f destination_matrix, translation_matrix;
+        Eigen::Matrix4f destination_matrix, transform_matrix;
         submap_id = it->first;
         destination_matrix = it->second;
-        translation_matrix = destination_matrix * submap_map_[submap_id].position_matrix.inverse();
+        transform_matrix = destination_matrix * submap_map_[submap_id].position_matrix.inverse();
 
-        // Shift submaps
-        pcl::transformPointCloud(submap_map_[submap_id].points, submap_map_[submap_id].points, translation_matrix);
-        submap_map_[submap_id].position_matrix = destination_matrix;
-
-        // Continue if submap is not in group
-        if (!submap_map_[submap_id].in_group) continue;
+        // Shift submaps if not in a group
+        if (!submap_map_[submap_id].in_group)
+        {
+            pcl::transformPointCloud(submap_map_[submap_id].points, submap_map_[submap_id].points, transform_matrix);
+            submap_map_[submap_id].position_matrix = destination_matrix;
+            continue;
+        }
 
         // Shift submaps in same group
         for (auto it2 = submap_map_.begin(); it2 != submap_map_.end(); it2++)
@@ -434,8 +485,8 @@ void NDTMapper::shift_submaps(const std::map<int, Eigen::Matrix4f>& destination_
             if (it2->second.in_group
                 && it2->second.group_id == submap_map_[submap_id].group_id)
             {
-                pcl::transformPointCloud(it2->second.points, it2->second.points, translation_matrix);
-                it2->second.position_matrix = destination_matrix * it2->second.position_matrix;
+                pcl::transformPointCloud(it2->second.points, it2->second.points, transform_matrix);
+                it2->second.position_matrix = transform_matrix * it2->second.position_matrix;
             }
         }
     }
@@ -444,19 +495,27 @@ void NDTMapper::shift_submaps(const std::map<int, Eigen::Matrix4f>& destination_
 // Close loop.
 bool NDTMapper::close_loop(const std::unordered_set<int>& loop_target_id_set, Pose& base_pose)
 {
-    // Get loop error
-    Eigen::Matrix4f loop_error_matrix;
-    Pose loop_error_pose;
+    // Get loop correction
+    Eigen::Matrix4f loop_correction_matrix;
+    Pose loop_correction_pose, initial_guess_correction;
     float loop_fitness_score;
     bool loop_convergence;
-    get_loop_error(loop_target_id_set, loop_error_matrix, loop_fitness_score, loop_convergence);
-    if (!loop_convergence)
+    float initial_guess_correction_distance;
+
+    get_loop_correction(loop_target_id_set, loop_correction_matrix, loop_fitness_score, loop_convergence, initial_guess_correction);
+
+    loop_correction_pose = convert_matrix2pose(loop_correction_matrix);
+    initial_guess_correction_distance = sqrt(initial_guess_correction.x * initial_guess_correction.x + initial_guess_correction.y * initial_guess_correction.y);
+    ROS_INFO("Loop correction:\n (x, y, z, roll, pitch, yaw): (%.3f, %.3f, %.3f, %.3f, %.3f, %.3f)", loop_correction_pose.x, loop_correction_pose.y, loop_correction_pose.z, loop_correction_pose.roll*180.0/M_PI, loop_correction_pose.pitch*180.0/M_PI, loop_correction_pose.yaw*180.0/M_PI);
+    ROS_INFO("Error from initial guess:\n (x, y, z, roll, pitch, yaw): (%.3f, %.3f, %.3f, %.3f, %.3f, %.3f)", initial_guess_correction.x, initial_guess_correction.y, initial_guess_correction.z, initial_guess_correction.roll*180.0/M_PI, initial_guess_correction.pitch*180.0/M_PI, initial_guess_correction.yaw*180.0/M_PI);
+
+    if (!loop_convergence || loop_fitness_score > 1000.0 || initial_guess_correction_distance > 10.0)
     {
-        ROS_WARN("Loop closure has not converged. Fitness score: %.3f", loop_fitness_score);
+        ROS_WARN("Loop closure aborted.\n Fitness score: %.3f, Initial guess correction distance: %.3f", loop_fitness_score, initial_guess_correction_distance);
         return false;
     }
-    loop_error_pose = convert_matrix2pose(loop_error_matrix);
-    ROS_INFO("Loop closure error:\n (x, y, z, roll, pitch, yaw): (%.3f, %.3f, %.3f, %.3f, %.3f, %.3f)", loop_error_pose.x, loop_error_pose.y, loop_error_pose.z, loop_error_pose.roll*180.0/M_PI, loop_error_pose.pitch*180.0/M_PI, loop_error_pose.yaw*180.0/M_PI);
+    if (abs(initial_guess_correction.z) > 1.0)
+        loop_correction_pose.z -= initial_guess_correction.z;
 
     // Get shortest path to root submap
     std::vector<int> loop_id_path;
@@ -470,8 +529,8 @@ bool NDTMapper::close_loop(const std::unordered_set<int>& loop_target_id_set, Po
     std::map<int, Eigen::Matrix4f> destination_matrix_map;
     for (auto id : grouped_loop_id_path)
         destination_matrix_map.insert(std::make_pair(id, submap_map_[id].position_matrix));
-    adjust_angles(loop_error_pose, destination_matrix_map);
-    adjust_positions(loop_error_pose, destination_matrix_map);
+    adjust_angles(loop_correction_pose, destination_matrix_map);
+    adjust_positions(loop_correction_pose, destination_matrix_map);
 
     // Close loop
     shift_submaps(destination_matrix_map);
@@ -484,10 +543,8 @@ bool NDTMapper::close_loop(const std::unordered_set<int>& loop_target_id_set, Po
     base_pose = last_base_pose_ = shifted_map2base_pose;
 
     // Update global pose graph if loop closure is confirmed
-    float loop_error_distance;
-    loop_error_distance = sqrt(loop_error_pose.x * loop_error_pose.x + loop_error_pose.y * loop_error_pose.y + loop_error_pose.z * loop_error_pose.z);
     ROS_INFO("Fitness score: %.3f", loop_fitness_score);
-    if (loop_error_distance < loop_closure_confirmation_error_ && loop_fitness_score < 0.1)
+    if (initial_guess_correction_distance < loop_closure_confirmation_error_ && loop_fitness_score < 0.1)
     {
         for (auto id : loop_target_id_set)
             global_pose_graph_.add_edge(current_submap_id_, id);
@@ -497,7 +554,7 @@ bool NDTMapper::close_loop(const std::unordered_set<int>& loop_target_id_set, Po
         for (auto id : loop_id_path)
             connected_id_set.insert(id);
         group_submaps(connected_id_set);
-        ROS_INFO("Loop closed. Final correction distance: %.3fm", loop_error_distance);
+        ROS_INFO("Loop closed. Final correction distance: %.3fm", initial_guess_correction_distance);
     }
 
     return true;

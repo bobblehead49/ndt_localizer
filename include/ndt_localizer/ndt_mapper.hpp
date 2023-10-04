@@ -112,7 +112,7 @@ private:
     std::unordered_set<int> get_locally_connected_ids(const int, const float);
     void group_submaps(const std::unordered_set<int>&);
     std::unordered_set<int> get_loop_target_ids(const std::unordered_set<int>&);
-    void get_loop_error(const std::unordered_set<int>&, Eigen::Matrix4f&, float&, bool&);
+    void get_loop_correction(const std::unordered_set<int>&, Eigen::Matrix4f&, float&, bool&, Pose&);
     std::vector<int> get_loop_id_path(const std::unordered_set<int>&, const int);
     std::vector<int> get_grouped_loop_id_path(const std::vector<int>&);
     void adjust_angles(const Pose&, std::map<int, Eigen::Matrix4f>&);
