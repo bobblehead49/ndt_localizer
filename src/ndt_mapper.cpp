@@ -278,6 +278,7 @@ bool NDTMapper::get_loop_correction(const std::unordered_set<int>& target_id_set
     pcl::PointCloud<pcl::PointXYZI>::Ptr source_voxel_filtered(new pcl::PointCloud<pcl::PointXYZI>);
     apply_voxel_grid_filter(source_cloud.makeShared(), source_voxel_filtered, voxel_leaf_size_);
     ndt_.setInputSource(source_voxel_filtered);
+    Eigen::Matrix4f source = submap_map_[current_submap_id_].position_matrix * base2lidar_matrix_;
 
     std::vector<Eigen::Matrix4f> correction_vector;
     std::vector<float> fitness_score_vector;
@@ -329,7 +330,7 @@ bool NDTMapper::get_loop_correction(const std::unordered_set<int>& target_id_set
         best_convergence = convergence_vector[best_idx];
 
         // Get destination matrix
-        best_destination = best_correction * submap_map_[current_submap_id_].position_matrix;
+        best_destination = best_correction * source;
 
         // Get destination pose
         Pose best_destination_pose =
@@ -345,7 +346,7 @@ bool NDTMapper::get_loop_correction(const std::unordered_set<int>& target_id_set
 
     // Get initial destination guess
     Eigen::Matrix4f initial_destination_guess =
-        initial_guess * submap_map_[current_submap_id_].position_matrix;
+        initial_guess * source;
 
     // Check if loop closure is acceptable
     Pose initial_guess_correction =
