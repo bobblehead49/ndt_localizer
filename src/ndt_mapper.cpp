@@ -248,6 +248,13 @@ void NDTMapper::get_initial_guess(const Eigen::Matrix4f& source, const Eigen::Ma
     // Get initial guess
     initial_guess = destination_matrix * source.inverse();
 
+    // Print source pose
+    Pose source_pose =
+        convert_matrix2pose(source);
+    ROS_INFO("Source pose:\n %.3f, %.3f, %.3f, %.3f, %.3f, %.3f",
+        source_pose.x, source_pose.y, source_pose.z,
+        source_pose.roll*180.0/M_PI, source_pose.pitch*180.0/M_PI, source_pose.yaw*180.0/M_PI);
+
     // Print initial guess
     Pose initial_guess_pose =
         convert_matrix2pose(destination_matrix);
@@ -356,13 +363,17 @@ bool NDTMapper::get_loop_correction(const std::unordered_set<int>& target_id_set
     // Set correction
     correction = best_correction;
 
+    ROS_INFO("Initial guess correction:\n %.3f, %.3f, %.3f, %.3f, %.3f, %.3f",
+        initial_guess_correction.x, initial_guess_correction.y, initial_guess_correction.z,
+        initial_guess_correction.roll*180.0/M_PI, initial_guess_correction.pitch*180.0/M_PI, initial_guess_correction.yaw*180.0/M_PI);
+
     // Reset z value if far from initial guess
     if (abs(initial_guess_correction.z) > 1.0)
     {
         Eigen::Matrix4f corrected_destination = best_destination;
         corrected_destination(2, 3) = initial_guess(2, 3);
         correction = corrected_destination * submap_map_[current_submap_id_].position_matrix.inverse();
-        ROS_WARN("Loop closure correction z value %.3fm is far from initial guess. Resetting to initial guess.", initial_guess_correction.z);
+        ROS_WARN("Initial guess correction z value is too big. Resetting to initial guess.");
     }
 
     // Reset roll and pitch if far from initial guess
@@ -375,7 +386,7 @@ bool NDTMapper::get_loop_correction(const std::unordered_set<int>& target_id_set
         corrected_destination_pose.pitch = initial_destination_guess_pose.pitch;
         Eigen::Matrix4f corrected_destination = convert_pose2matrix(corrected_destination_pose);
         correction = corrected_destination * submap_map_[current_submap_id_].position_matrix.inverse();
-        ROS_WARN("Loop closure correction roll and pitch values %.3f, %.3f are far from initial guess. Resetting to initial guess.", initial_guess_correction.roll, initial_guess_correction.pitch);
+        ROS_WARN("Initial guess correction roll or pitch is too big. Resetting to initial guess.");
     }
 
     return true;
@@ -521,7 +532,7 @@ bool NDTMapper::close_loop(const std::unordered_set<int>& loop_target_id_set, Po
     // Publish target tf
     geometry_msgs::TransformStamped target_tf =
         convert_matrix2tf(target_matrix);
-    target_tf.header.stamp = ros::Time::now();
+    target_tf.header.stamp = current_scan_stamp_;
     target_tf.header.frame_id = map_frame_;
     target_tf.child_frame_id = "target";
     tf_broadcaster_.sendTransform(target_tf);
@@ -529,7 +540,7 @@ bool NDTMapper::close_loop(const std::unordered_set<int>& loop_target_id_set, Po
     // Publish initial guess tf
     geometry_msgs::TransformStamped initial_guess_tf =
         convert_matrix2tf(initial_guess_matrix * source_matrix);
-    initial_guess_tf.header.stamp = ros::Time::now();
+    initial_guess_tf.header.stamp = current_scan_stamp_;
     initial_guess_tf.header.frame_id = map_frame_;
     initial_guess_tf.child_frame_id = "initial_guess";
     tf_broadcaster_.sendTransform(initial_guess_tf);
@@ -593,8 +604,10 @@ bool NDTMapper::close_loop(const std::unordered_set<int>& loop_target_id_set, Po
     // Continue loop closure if loop correction is large
     ROS_INFO("Loop correction 2d distance: %.3f", loop_correction_distance_2d);
     ROS_INFO("Loop correction z distance: %.3f", loop_correction_pose.z);
+    ROS_INFO("Loop closure yaw: %.3f", loop_correction_pose.yaw*180.0/M_PI);
     if (loop_correction_distance_2d > loop_closure_confirmation_error_
-        || abs(loop_correction_pose.z) > loop_closure_confirmation_error_)
+        || abs(loop_correction_pose.z) > loop_closure_confirmation_error_
+        || abs(loop_correction_pose.yaw) > 0.5 * M_PI / 180.0)
         return true;
 
     // Update global pose graph
@@ -740,6 +753,7 @@ void NDTMapper::points_callback(const sensor_msgs::PointCloud2ConstPtr& msg)
     double dt = (msg->header.stamp - last_scan_stamp_).toSec();
     if (dt < 0.0)
         return;
+    current_scan_stamp_ = msg->header.stamp;
 
     pcl::PointCloud<pcl::PointXYZI>::Ptr scan(new pcl::PointCloud<pcl::PointXYZI>);
     pcl::PointCloud<pcl::PointXYZI>::Ptr scan_filtered(new pcl::PointCloud<pcl::PointXYZI>);

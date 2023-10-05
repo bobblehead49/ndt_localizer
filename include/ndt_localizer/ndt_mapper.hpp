@@ -48,6 +48,7 @@ private:
     ros::Publisher trans_prob_pub_;
     ros::Publisher deque_pub_;
 
+    ros::Time current_scan_stamp_;
     ros::Time last_scan_stamp_;
     ros::Time last_map_publish_stamp_;
 
