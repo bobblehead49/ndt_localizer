@@ -251,6 +251,7 @@ void NDTMapper::get_initial_guess(const Eigen::Matrix4f& source, const Eigen::Ma
     // Print source pose
     Pose source_pose =
         convert_matrix2pose(source);
+    ROS_INFO("\n-----------------------------------------------------------------");
     ROS_INFO("Source pose:\n %.3f, %.3f, %.3f, %.3f, %.3f, %.3f",
         source_pose.x, source_pose.y, source_pose.z,
         source_pose.roll*180.0/M_PI, source_pose.pitch*180.0/M_PI, source_pose.yaw*180.0/M_PI);
@@ -368,26 +369,24 @@ bool NDTMapper::get_loop_correction(const std::unordered_set<int>& target_id_set
         initial_guess_correction.x, initial_guess_correction.y, initial_guess_correction.z,
         initial_guess_correction.roll*180.0/M_PI, initial_guess_correction.pitch*180.0/M_PI, initial_guess_correction.yaw*180.0/M_PI);
 
+    // Prepare corrected destination
+    Eigen::Matrix4f corrected_destination = best_destination;
+
     // Reset z value if far from initial guess
     if (abs(initial_guess_correction.z) > 1.0)
     {
-        Eigen::Matrix4f corrected_destination = best_destination;
-        corrected_destination(2, 3) = initial_guess(2, 3);
-        correction = corrected_destination * submap_map_[current_submap_id_].position_matrix.inverse();
-        ROS_WARN("Initial guess correction z value is too big. Resetting to initial guess.");
+        corrected_destination(2, 3) = initial_destination_guess(2, 3);
+        correction = corrected_destination * source.inverse();
+        ROS_WARN("Initial guess correction z value is too big. Resetting z value to initial guess.");
     }
 
     // Reset roll and pitch if far from initial guess
     if (abs(initial_guess_correction.roll) > 2.0 * M_PI / 180.0
         || abs(initial_guess_correction.pitch) > 2.0 * M_PI / 180.0)
     {
-        Pose corrected_destination_pose = convert_matrix2pose(best_destination);
-        Pose initial_destination_guess_pose = convert_matrix2pose(initial_destination_guess);
-        corrected_destination_pose.roll = initial_destination_guess_pose.roll;
-        corrected_destination_pose.pitch = initial_destination_guess_pose.pitch;
-        Eigen::Matrix4f corrected_destination = convert_pose2matrix(corrected_destination_pose);
-        correction = corrected_destination * submap_map_[current_submap_id_].position_matrix.inverse();
-        ROS_WARN("Initial guess correction roll or pitch is too big. Resetting to initial guess.");
+        corrected_destination.block<3, 3>(0, 0) = initial_destination_guess.block<3, 3>(0, 0);
+        correction = corrected_destination * source.inverse();
+        ROS_WARN("Initial guess correction roll or pitch is too big. Resetting orientation to initial guess.");
     }
 
     return true;
@@ -487,13 +486,13 @@ void NDTMapper::shift_submaps(const std::map<int, Eigen::Matrix4f>& destination_
         Eigen::Matrix4f destination_matrix, transform_matrix;
         submap_id = it->first;
         destination_matrix = it->second;
-        transform_matrix = destination_matrix * submap_map_[submap_id].position_matrix.inverse();
+        transform_matrix = destination_matrix * (submap_map_[submap_id].position_matrix * base2lidar_matrix_).inverse();
 
         // Shift submaps if not in a group
         if (!submap_map_[submap_id].in_group)
         {
             pcl::transformPointCloud(submap_map_[submap_id].points, submap_map_[submap_id].points, transform_matrix);
-            submap_map_[submap_id].position_matrix = destination_matrix;
+            submap_map_[submap_id].position_matrix = destination_matrix * lidar2base_matrix_;
             continue;
         }
 
@@ -558,7 +557,7 @@ bool NDTMapper::close_loop(const std::unordered_set<int>& loop_target_id_set, Po
     // Get final destination matrix
     Eigen::Matrix4f final_destination_matrix =
         loop_correction_matrix * source_matrix;
-
+    
     // Get shortest path to root submap
     std::vector<int> loop_id_path =
         get_loop_id_path(loop_target_id_set, current_submap_id_);
@@ -570,8 +569,8 @@ bool NDTMapper::close_loop(const std::unordered_set<int>& loop_target_id_set, Po
     // Prepare destination matrix map
     std::map<int, Eigen::Matrix4f> destination_matrix_map;
     for (auto id : grouped_loop_id_path)
-        destination_matrix_map.insert(std::make_pair(id, submap_map_[id].position_matrix));
-    
+        destination_matrix_map.insert(std::make_pair(id, submap_map_[id].position_matrix * base2lidar_matrix_));
+
     // Adjust angles of destination matrices
     Pose angle_correction_pose =
         convert_matrix2pose(source_matrix.inverse() * final_destination_matrix);
@@ -580,7 +579,7 @@ bool NDTMapper::close_loop(const std::unordered_set<int>& loop_target_id_set, Po
     // Adjust positions of destination matrices
     Pose translation_correction_pose;
     Eigen::Matrix4f loop_end_matrix;
-    loop_end_matrix = destination_matrix_map.rbegin()->second * base2lidar_matrix_;
+    loop_end_matrix = destination_matrix_map.rbegin()->second;
     translation_correction_pose.x = final_destination_matrix(0, 3) - loop_end_matrix(0, 3);
     translation_correction_pose.y = final_destination_matrix(1, 3) - loop_end_matrix(1, 3);
     translation_correction_pose.z = final_destination_matrix(2, 3) - loop_end_matrix(2, 3);
@@ -592,7 +591,7 @@ bool NDTMapper::close_loop(const std::unordered_set<int>& loop_target_id_set, Po
     // Update base pose
     Eigen::Matrix4f shifted_map2base_matrix;
     Pose shifted_map2base_pose;
-    shifted_map2base_matrix = std::prev(destination_matrix_map.end())->second;
+    shifted_map2base_matrix = destination_matrix_map.rbegin()->second * lidar2base_matrix_;
     shifted_map2base_pose = convert_matrix2pose(shifted_map2base_matrix);
     base_pose = last_base_pose_ = shifted_map2base_pose;
 
@@ -605,7 +604,8 @@ bool NDTMapper::close_loop(const std::unordered_set<int>& loop_target_id_set, Po
     // Continue loop closure if loop correction is large
     ROS_INFO("Loop correction 2d distance: %.3f", loop_correction_distance_2d);
     ROS_INFO("Loop correction z distance: %.3f", loop_correction_pose.z);
-    ROS_INFO("Loop closure yaw: %.3f", loop_correction_pose.yaw*180.0/M_PI);
+    ROS_INFO("Loop correction roll pitch yaw: %.3f, %.3f, %.3f",
+        loop_correction_pose.roll*180.0/M_PI, loop_correction_pose.pitch*180.0/M_PI, loop_correction_pose.yaw*180.0/M_PI);
     if (loop_correction_distance_2d > loop_closure_confirmation_error_
         || abs(loop_correction_pose.z) > loop_closure_confirmation_error_
         || abs(loop_correction_pose.yaw) > 0.5 * M_PI / 180.0)
@@ -715,7 +715,7 @@ void NDTMapper::odom_callback(const nav_msgs::OdometryConstPtr& msg)
     last_odom_translation_matrix = last_odom_matrix;
     last_odom_translation_matrix.block<3, 3>(0, 0) = Eigen::Matrix3f::Identity();
     last_odom_orientation_matrix = last_odom_matrix;
-    last_odom_orientation_matrix.block<3, 1>(0, 3) = Eigen::Vector3f(0.0, 0.0, 0.0);
+    last_odom_orientation_matrix.block<3, 1>(0, 3) = Eigen::Vector3f::Zero();
     last_map2base_matrix = convert_pose2matrix(last_base_pose_);
 
     // Get map to base matrix
@@ -990,15 +990,6 @@ void NDTMapper::map_save_request_callback(const std_msgs::StringConstPtr& msg)
     if (!ros::ok())
         return;
 
-    if (save_uncompressed_map_)
-    {
-        // Save uncompressed full map
-        filepath = out_dir / "uncompressed_map.pcd";
-        ROS_INFO("Saving uncompressed full map to %s", filepath.c_str());
-        pcl::io::savePCDFileASCII(filepath, map);
-        ROS_INFO("Saved uncompressed full map to %s", filepath.c_str());
-    }
-
     if (save_submaps_)
     {
         // Prepare csv for submap info
@@ -1024,6 +1015,15 @@ void NDTMapper::map_save_request_callback(const std_msgs::StringConstPtr& msg)
             pcl::io::savePCDFileBinaryCompressed(filepath, submap_with_info.second.points);
         }
         ROS_INFO("Saved submaps to %s", (out_dir / "submaps").c_str());
+    }
+
+    if (save_uncompressed_map_)
+    {
+        // Save uncompressed full map
+        filepath = out_dir / "uncompressed_map.pcd";
+        ROS_INFO("Saving uncompressed full map to %s", filepath.c_str());
+        pcl::io::savePCDFileASCII(filepath, map);
+        ROS_INFO("Saved uncompressed full map to %s", filepath.c_str());
     }
 }
 
