@@ -47,6 +47,7 @@ private:
     ros::Publisher num_iteration_pub_;
     ros::Publisher trans_prob_pub_;
     ros::Publisher deque_pub_;
+    ros::Publisher marker_pub_;
 
     ros::Time current_scan_stamp_;
     ros::Time last_scan_stamp_;
@@ -71,6 +72,7 @@ private:
     bool map_initialized_;
     bool use_loop_closure_;
     bool adjusted_loop_with_last_scan_;
+    bool attempting_loop_closure_;
     bool save_uncompressed_map_;
     bool save_submaps_;
 
@@ -88,7 +90,6 @@ private:
     float submap_include_distance_;
     float map_publish_interval_;
     float submap_connect_distance_;
-    float loop_connect_distance_;
     float loop_closure_confirmation_error_;
 
     Eigen::Matrix4f base2lidar_matrix_;
@@ -117,8 +118,8 @@ private:
     bool get_loop_correction(const std::unordered_set<int>& target_id_set, const Eigen::Matrix4f& initial_guess, Eigen::Matrix4f& correction);
     std::vector<int> get_loop_id_path(const std::unordered_set<int>&, const int);
     std::vector<int> get_grouped_loop_id_path(const std::vector<int>&);
-    void adjust_angles(const Pose&, std::map<int, Eigen::Matrix4f>&);
-    void adjust_positions(const Pose&, std::map<int, Eigen::Matrix4f>&);
+    void adjust_angles(const Eigen::Matrix4f&, std::map<int, Eigen::Matrix4f>&);
+    void adjust_positions(const Eigen::Matrix4f&, std::map<int, Eigen::Matrix4f>&);
     void shift_submaps(const std::map<int, Eigen::Matrix4f>&);
     bool close_loop(const std::unordered_set<int>&, Pose&);
     void update_maps(const pcl::PointCloud<pcl::PointXYZI>::Ptr&, const Eigen::Matrix4f&, Pose&);

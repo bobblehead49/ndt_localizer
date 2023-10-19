@@ -13,6 +13,7 @@
 #include <fstream>
 
 #include <Eigen/Core>
+#include <unsupported/Eigen/MatrixFunctions>
 
 #include <pcl/point_cloud.h>
 #include <pcl/point_types.h>
@@ -29,9 +30,84 @@
 #include <sensor_msgs/PointCloud2.h>
 #include <nav_msgs/Odometry.h>
 #include <geometry_msgs/Twist.h>
+#include <visualization_msgs/MarkerArray.h>
 
 #include <tf2_eigen/tf2_eigen.h>
 #include <tf2_geometry_msgs/tf2_geometry_msgs.h>
+
+
+inline float SIGN(float x) { 
+	return (x >= 0.0f) ? +1.0f : -1.0f; 
+}
+
+inline float NORM(float a, float b, float c, float d) { 
+	return sqrt(a * a + b * b + c * c + d * d); 
+}
+
+// quaternion = [w, x, y, z]'
+void mRot2Quat(const Eigen::Matrix4f& m, float& qw, float& qx, float& qy, float& qz) {
+	float r11 = m(0, 0);
+    float r12 = m(0, 1);
+    float r13 = m(0, 2);
+    float r21 = m(1, 0);
+    float r22 = m(1, 1);
+    float r23 = m(1, 2);
+    float r31 = m(2, 0);
+    float r32 = m(2, 1);
+    float r33 = m(2, 2);
+	qw = (r11 + r22 + r33 + 1.0f) / 4.0f;
+	qx = (r11 - r22 - r33 + 1.0f) / 4.0f;
+	qy = (-r11 + r22 - r33 + 1.0f) / 4.0f;
+	qz = (-r11 - r22 + r33 + 1.0f) / 4.0f;
+	if (qw < 0.0f) {
+		qw = 0.0f;
+	}
+	if (qx < 0.0f) {
+		qx = 0.0f;
+	}
+	if (qy < 0.0f) {
+		qy = 0.0f;
+	}
+	if (qz < 0.0f) {
+		qz = 0.0f;
+	}
+	qw = sqrt(qw);
+	qx = sqrt(qx);
+	qy = sqrt(qy);
+	qz = sqrt(qz);
+	if (qw >= qx && qw >= qy && qw >= qz) {
+		qw *= +1.0f;
+		qx *= SIGN(r32 - r23);
+		qy *= SIGN(r13 - r31);
+		qz *= SIGN(r21 - r12);
+	}
+	else if (qx >= qw && qx >= qy && qx >= qz) {
+		qw *= SIGN(r32 - r23);
+		qx *= +1.0f;
+		qy *= SIGN(r21 + r12);
+		qz *= SIGN(r13 + r31);
+	}
+	else if (qy >= qw && qy >= qx && qy >= qz) {
+		qw *= SIGN(r13 - r31);
+		qx *= SIGN(r21 + r12);
+		qy *= +1.0f;
+		qz *= SIGN(r32 + r23);
+	}
+	else if (qz >= qw && qz >= qx && qz >= qy) {
+		qw *= SIGN(r21 - r12);
+		qx *= SIGN(r31 + r13);
+		qy *= SIGN(r32 + r23);
+		qz *= +1.0f;
+	}
+	else {
+		printf("coding error\n");
+	}
+	float r = NORM(qw, qx, qy, qz);
+	qw /= r;
+	qx /= r;
+	qy /= r;
+	qz /= r;
+}
 
 
 // Constructor
@@ -62,9 +138,8 @@ NDTMapper::NDTMapper() : nh_(), pnh_("~"), tf_listener_(tf_buffer_)
     pnh_.param<float>("map_add_shift", map_add_shift_, 1.0);
     pnh_.param<int>("submap_scan_size", submap_scan_size_, 1);
     pnh_.param<float>("submap_include_distance", submap_include_distance_, 30.0);
-    pnh_.param<float>("submap_connect_distance", submap_connect_distance_, 5.0);
+    pnh_.param<float>("submap_connect_distance", submap_connect_distance_, 8.0);
     pnh_.param<bool>("use_loop_closure", use_loop_closure_, true);
-    pnh_.param<float>("loop_connect_distance", loop_connect_distance_, 15.0);
     pnh_.param<float>("loop_closure_confirmation_error", loop_closure_confirmation_error_, 0.05);
     pnh_.param<bool>("save_uncompressed_map", save_uncompressed_map_, true);
     pnh_.param<bool>("save_submaps", save_submaps_, true);
@@ -77,6 +152,7 @@ NDTMapper::NDTMapper() : nh_(), pnh_("~"), tf_listener_(tf_buffer_)
     map_initialized_ = false;
     odom_initialized_ = false;
     adjusted_loop_with_last_scan_ = false;
+    attempting_loop_closure_ = false;
     submap_scan_count_ = 0;
     current_submap_id_ = 0;
     current_group_id_ = 0;
@@ -116,6 +192,7 @@ NDTMapper::NDTMapper() : nh_(), pnh_("~"), tf_listener_(tf_buffer_)
     num_iteration_pub_ = nh_.advertise<std_msgs::Int32>("/ndt_mapper/iteration_num", 1);
     trans_prob_pub_ = nh_.advertise<std_msgs::Float32>("/ndt_mapper/transformation_probability", 1);
     deque_pub_ = nh_.advertise<std_msgs::Empty>("/ndt_mapper/deque", 1000000);
+    marker_pub_ = nh_.advertise<visualization_msgs::MarkerArray>("/ndt_mapper/marker", 1);
 }
 
 // Destructor
@@ -198,7 +275,7 @@ void NDTMapper::group_submaps(const std::unordered_set<int>& connected_id_set)
 std::unordered_set<int> NDTMapper::get_loop_target_ids(const std::unordered_set<int>& connected_id_set)
 {
     std::unordered_set<int> loop_target_id_set;
-    loop_target_id_set = get_neighbor_ids(submap_map_, loop_connect_distance_);
+    loop_target_id_set = get_neighbor_ids(submap_map_, submap_connect_distance_);
 
     // Remove connected ids
     for (auto id : connected_id_set)
@@ -255,6 +332,13 @@ void NDTMapper::get_initial_guess(const Eigen::Matrix4f& source, const Eigen::Ma
     ROS_INFO("Source pose:\n %.3f, %.3f, %.3f, %.3f, %.3f, %.3f",
         source_pose.x, source_pose.y, source_pose.z,
         source_pose.roll*180.0/M_PI, source_pose.pitch*180.0/M_PI, source_pose.yaw*180.0/M_PI);
+
+    // Print target pose
+    Pose target_pose =
+        convert_matrix2pose(target);
+    ROS_INFO("Target pose:\n %.3f, %.3f, %.3f, %.3f, %.3f, %.3f",
+        target_pose.x, target_pose.y, target_pose.z,
+        target_pose.roll*180.0/M_PI, target_pose.pitch*180.0/M_PI, target_pose.yaw*180.0/M_PI);
 
     // Print initial guess
     Pose initial_guess_pose =
@@ -380,14 +464,14 @@ bool NDTMapper::get_loop_correction(const std::unordered_set<int>& target_id_set
         ROS_WARN("Initial guess correction z value is too big. Resetting z value to initial guess.");
     }
 
-    // Reset roll and pitch if far from initial guess
-    if (abs(initial_guess_correction.roll) > 2.0 * M_PI / 180.0
-        || abs(initial_guess_correction.pitch) > 2.0 * M_PI / 180.0)
-    {
-        corrected_destination.block<3, 3>(0, 0) = initial_destination_guess.block<3, 3>(0, 0);
-        correction = corrected_destination * source.inverse();
-        ROS_WARN("Initial guess correction roll or pitch is too big. Resetting orientation to initial guess.");
-    }
+    // // Reset roll and pitch if far from initial guess
+    // if (abs(initial_guess_correction.roll) > 2.0 * M_PI / 180.0
+    //     || abs(initial_guess_correction.pitch) > 2.0 * M_PI / 180.0)
+    // {
+    //     corrected_destination.block<3, 3>(0, 0) = initial_destination_guess.block<3, 3>(0, 0);
+    //     correction = corrected_destination * source.inverse();
+    //     ROS_WARN("Initial guess correction roll or pitch is too big. Resetting orientation to initial guess.");
+    // }
 
     return true;
 }
@@ -415,33 +499,38 @@ std::vector<int> NDTMapper::get_loop_id_path(const std::unordered_set<int>& star
 std::vector<int> NDTMapper::get_grouped_loop_id_path(const std::vector<int>& loop_id_path)
 {
     std::vector<int> grouped_loop_id_path;
-    std::unordered_set<int> checked_groups;
+    std::unordered_map<int, int> group_id_map;
     for (auto id : loop_id_path)
     {
         if (submap_map_[id].in_group)
         {
             // Skip if group is already checked
-            if (checked_groups.find(submap_map_[id].group_id) != checked_groups.end())
+            if (group_id_map.find(submap_map_[id].group_id) != group_id_map.end())
+            {
+                if (++group_id_map[submap_map_[id].group_id] > 5)
+                    grouped_loop_id_path.clear();
                 continue;
+            }
             else
-                checked_groups.insert(submap_map_[id].group_id);
+                group_id_map[submap_map_[id].group_id] = 1;
         }
         grouped_loop_id_path.push_back(id);
     }
     return grouped_loop_id_path;
 }
 
-void NDTMapper::adjust_angles(const Pose& loop_correction_pose, std::map<int, Eigen::Matrix4f>& destination_matrix_map)
+void NDTMapper::adjust_angles(const Eigen::Matrix4f& loop_correction_matrix, std::map<int, Eigen::Matrix4f>& destination_matrix_map)
 {
     // Get rotation matrix
-    Pose rotation_pose;
-    Eigen::Matrix4f rotation_matrix;
-    rotation_pose.x = rotation_pose.y = rotation_pose.z = 0.0;
-    rotation_pose.roll = loop_correction_pose.roll / (destination_matrix_map.size()-1);
-    rotation_pose.pitch = loop_correction_pose.pitch / (destination_matrix_map.size()-1);
-    rotation_pose.yaw = loop_correction_pose.yaw / (destination_matrix_map.size()-1);
-    rotation_matrix = convert_pose2matrix(rotation_pose);
+    Eigen::MatrixPower<Eigen::Matrix4f> rotation_matrix_power(loop_correction_matrix);
+    Eigen::Matrix4f rotation_matrix = rotation_matrix_power(1.0 / (destination_matrix_map.size()-1));
 
+    // Print rotation pose
+    Pose rotation_pose = convert_matrix2pose(rotation_matrix);
+    ROS_INFO("Rotation pose:\n %.3f, %.3f, %.3f, %.3f, %.3f, %.3f",
+        rotation_pose.x, rotation_pose.y, rotation_pose.z,
+        rotation_pose.roll*180.0/M_PI, rotation_pose.pitch*180.0/M_PI, rotation_pose.yaw*180.0/M_PI);
+    
     // Rotate all destination matrices
     for (auto it = destination_matrix_map.begin(); it != destination_matrix_map.end(); it++)
     {
@@ -459,14 +548,17 @@ void NDTMapper::adjust_angles(const Pose& loop_correction_pose, std::map<int, Ei
     }
 }
 
-void NDTMapper::adjust_positions(const Pose& loop_correction_pose, std::map<int, Eigen::Matrix4f>& destination_matrix_map)
+void NDTMapper::adjust_positions(const Eigen::Matrix4f& loop_correction_matrix, std::map<int, Eigen::Matrix4f>& destination_matrix_map)
 {
     // Get translation matrix
-    Eigen::Matrix4f translation_matrix;
-    translation_matrix = Eigen::Matrix4f::Identity();
-    translation_matrix(0, 3) = loop_correction_pose.x / (destination_matrix_map.size()-1);
-    translation_matrix(1, 3) = loop_correction_pose.y / (destination_matrix_map.size()-1);
-    translation_matrix(2, 3) = loop_correction_pose.z / (destination_matrix_map.size()-1);
+    Eigen::MatrixPower<Eigen::Matrix4f> translation_matrix_power(loop_correction_matrix);
+    Eigen::Matrix4f translation_matrix = translation_matrix_power(1.0 / (destination_matrix_map.size()-1));
+
+    // Print translation pose
+    Pose translation_pose = convert_matrix2pose(translation_matrix);
+    ROS_INFO("Translation pose:\n %.3f, %.3f, %.3f, %.3f, %.3f, %.3f",
+        translation_pose.x, translation_pose.y, translation_pose.z,
+        translation_pose.roll*180.0/M_PI, translation_pose.pitch*180.0/M_PI, translation_pose.yaw*180.0/M_PI);
 
     // Translate all destination matrices
     for (auto it = destination_matrix_map.begin(); it != destination_matrix_map.end(); it++)
@@ -513,8 +605,7 @@ void NDTMapper::shift_submaps(const std::map<int, Eigen::Matrix4f>& destination_
 bool NDTMapper::close_loop(const std::unordered_set<int>& loop_target_id_set, Pose& base_pose)
 {
     // Get closest loop target position matrix
-    int closest_loop_target_id;
-    closest_loop_target_id = *loop_target_id_set.begin();
+    int closest_loop_target_id = *loop_target_id_set.begin();
     for (auto id : loop_target_id_set)
     {
         if (submap_map_[id].distance < submap_map_[closest_loop_target_id].distance)
@@ -572,18 +663,144 @@ bool NDTMapper::close_loop(const std::unordered_set<int>& loop_target_id_set, Po
         destination_matrix_map.insert(std::make_pair(id, submap_map_[id].position_matrix * base2lidar_matrix_));
 
     // Adjust angles of destination matrices
-    Pose angle_correction_pose =
-        convert_matrix2pose(source_matrix.inverse() * final_destination_matrix);
-    adjust_angles(angle_correction_pose, destination_matrix_map);
+    Eigen::Matrix4f angle_correction_matrix = 
+        source_matrix.inverse() * final_destination_matrix;
+    angle_correction_matrix.block<3, 1>(0, 3) = Eigen::Vector3f::Zero();
+    adjust_angles(angle_correction_matrix, destination_matrix_map);
+
+    // Create marker array of destination matrices
+    visualization_msgs::MarkerArray destination_marker_array;
+
+    // Add destination markers
+    for (auto it = destination_matrix_map.begin(); it != destination_matrix_map.end(); it++)
+    {
+        Eigen::Matrix4f destination_matrix = it->second;
+        destination_matrix.block<1, 3>(3, 0) = Eigen::Vector3f::Zero();
+        Eigen::Matrix4f rot_des_mat;
+
+        // Get destination quaternion
+        float qx, qy, qz, qw;
+        mRot2Quat(destination_matrix, qw, qx, qy, qz);
+
+        visualization_msgs::Marker destination_marker;
+        destination_marker.header.frame_id = map_frame_;
+        destination_marker.header.stamp = current_scan_stamp_;
+        destination_marker.ns = "z";
+        destination_marker.id = it->first;
+        destination_marker.type = visualization_msgs::Marker::ARROW;
+        destination_marker.action = visualization_msgs::Marker::ADD;
+        destination_marker.pose.position.x = destination_matrix(0, 3);
+        destination_marker.pose.position.y = destination_matrix(1, 3);
+        destination_marker.pose.position.z = destination_matrix(2, 3);
+        destination_marker.pose.orientation.x = qx;
+        destination_marker.pose.orientation.y = qy;
+        destination_marker.pose.orientation.z = qz;
+        destination_marker.pose.orientation.w = qw;
+        destination_marker.scale.x = 1.0;
+        destination_marker.scale.y = 0.1;
+        destination_marker.scale.z = 0.1;
+        destination_marker.color.a = 1.0;
+        destination_marker.color.r = 1.0;
+        destination_marker.color.g = 0.0;
+        destination_marker.color.b = 0.0;
+        destination_marker_array.markers.push_back(destination_marker);
+
+        Pose pose;
+        pose.x = pose.y = pose.z = 0.0;
+        pose.roll = pose.pitch = pose.yaw = 0.0;
+        pose.yaw = M_PI / 2.0;
+
+        Eigen::Matrix4f rot_mat = convert_pose2matrix(pose);
+        rot_des_mat = destination_matrix * rot_mat;
+
+        // Get destination quaternion
+        mRot2Quat(rot_des_mat, qw, qx, qy, qz);
+
+        destination_marker.header.frame_id = map_frame_;
+        destination_marker.header.stamp = current_scan_stamp_;
+        destination_marker.ns = "y";
+        destination_marker.id = it->first + 10000;
+        destination_marker.type = visualization_msgs::Marker::ARROW;
+        destination_marker.action = visualization_msgs::Marker::ADD;
+        destination_marker.pose.position.x = destination_matrix(0, 3);
+        destination_marker.pose.position.y = destination_matrix(1, 3);
+        destination_marker.pose.position.z = destination_matrix(2, 3);
+        destination_marker.pose.orientation.x = qx;
+        destination_marker.pose.orientation.y = qy;
+        destination_marker.pose.orientation.z = qz;
+        destination_marker.pose.orientation.w = qw;
+        destination_marker.scale.x = 1.0;
+        destination_marker.scale.y = 0.1;
+        destination_marker.scale.z = 0.1;
+        destination_marker.color.a = 1.0;
+        destination_marker.color.r = 0.0;
+        destination_marker.color.g = 1.0;
+        destination_marker.color.b = 0.0;
+        destination_marker_array.markers.push_back(destination_marker);
+
+        pose.x = pose.y = pose.z = 0.0;
+        pose.roll = pose.pitch = pose.yaw = 0.0;
+        pose.pitch = -M_PI / 2.0;
+
+        rot_mat = convert_pose2matrix(pose);
+        rot_des_mat = destination_matrix * rot_mat;
+
+        // Get destination quaternion
+        mRot2Quat(rot_des_mat, qw, qx, qy, qz);
+
+        destination_marker.header.frame_id = map_frame_;
+        destination_marker.header.stamp = current_scan_stamp_;
+        destination_marker.ns = "x";
+        destination_marker.id = it->first + 100000000;
+        destination_marker.type = visualization_msgs::Marker::ARROW;
+        destination_marker.action = visualization_msgs::Marker::ADD;
+        destination_marker.pose.position.x = destination_matrix(0, 3);
+        destination_marker.pose.position.y = destination_matrix(1, 3);
+        destination_marker.pose.position.z = destination_matrix(2, 3);
+        destination_marker.pose.orientation.x = qx;
+        destination_marker.pose.orientation.y = qy;
+        destination_marker.pose.orientation.z = qz;
+        destination_marker.pose.orientation.w = qw;
+        destination_marker.scale.x = 1.0;
+        destination_marker.scale.y = 0.1;
+        destination_marker.scale.z = 0.1;
+        destination_marker.color.a = 1.0;
+        destination_marker.color.r = 0.0;
+        destination_marker.color.g = 0.0;
+        destination_marker.color.b = 1.0;
+        destination_marker_array.markers.push_back(destination_marker);
+
+        destination_marker.header.frame_id = map_frame_;
+        destination_marker.header.stamp = current_scan_stamp_;
+        destination_marker.ns = "text";
+        destination_marker.id = it->first + 1000000000000;
+        destination_marker.type = visualization_msgs::Marker::TEXT_VIEW_FACING;
+        destination_marker.action = visualization_msgs::Marker::ADD;
+        destination_marker.pose.position.x = destination_matrix(0, 3);
+        destination_marker.pose.position.y = destination_matrix(1, 3);
+        destination_marker.pose.position.z = destination_matrix(2, 3)-1.0;
+        destination_marker.pose.orientation.x = qx;
+        destination_marker.pose.orientation.y = qy;
+        destination_marker.pose.orientation.z = qz;
+        destination_marker.pose.orientation.w = qw;
+        destination_marker.scale.x = 1.0;
+        destination_marker.scale.y = 1.0;
+        destination_marker.scale.z = 1.0;
+        destination_marker.color.a = 1.0;
+        destination_marker.color.r = 1.0;
+        destination_marker.color.g = 1.0;
+        destination_marker.color.b = 1.0;
+        destination_marker.text = std::to_string(it->first);
+        destination_marker_array.markers.push_back(destination_marker);
+    }
+
+    // Publish destination markers
+    marker_pub_.publish(destination_marker_array);
 
     // Adjust positions of destination matrices
-    Pose translation_correction_pose;
-    Eigen::Matrix4f loop_end_matrix;
-    loop_end_matrix = destination_matrix_map.rbegin()->second;
-    translation_correction_pose.x = final_destination_matrix(0, 3) - loop_end_matrix(0, 3);
-    translation_correction_pose.y = final_destination_matrix(1, 3) - loop_end_matrix(1, 3);
-    translation_correction_pose.z = final_destination_matrix(2, 3) - loop_end_matrix(2, 3);
-    adjust_positions(translation_correction_pose, destination_matrix_map);
+    Eigen::Matrix4f translation_correction_matrix = Eigen::Matrix4f::Identity();
+    translation_correction_matrix.block<3, 1>(0, 3) = (destination_matrix_map.rbegin()->second.inverse() * final_destination_matrix).block<3, 1>(0, 3);
+    adjust_positions(translation_correction_matrix, destination_matrix_map);
 
     // Close loop
     shift_submaps(destination_matrix_map);
@@ -623,6 +840,7 @@ bool NDTMapper::close_loop(const std::unordered_set<int>& loop_target_id_set, Po
         connected_id_set.insert(id);
     group_submaps(connected_id_set);
 
+    attempting_loop_closure_ = false;
     ROS_INFO("Loop closed.");
 
     return true;
@@ -651,8 +869,12 @@ void NDTMapper::update_maps(const pcl::PointCloud<pcl::PointXYZI>::Ptr& scan_for
         submap_with_info = init_submap_with_info_;
         submap_with_info.points = submap_;
         submap_with_info.position_matrix = map2base_matrix;
-        submap_map_.insert(std::make_pair(current_submap_id_, submap_with_info));
+        submap_map_.insert(std::make_pair(++current_submap_id_, submap_with_info));
         global_pose_graph_.add_edge(current_submap_id_-1, current_submap_id_);
+
+        // Reset submap
+        submap_scan_count_ = 0;
+        submap_.clear();
 
         // Get submap ids to add to target map
         std::unordered_set<int> target_id_set;
@@ -665,8 +887,12 @@ void NDTMapper::update_maps(const pcl::PointCloud<pcl::PointXYZI>::Ptr& scan_for
             loop_target_id_set = get_loop_target_ids(target_id_set);
 
             // Enter loop closing process if loop is detected
+            adjusted_loop_with_last_scan_ = false;
             if (loop_target_id_set.size() > 0)
+            {
+                attempting_loop_closure_ = true;
                 adjusted_loop_with_last_scan_ = close_loop(loop_target_id_set, base_pose);
+            }
         }
         else
             target_id_set = get_neighbor_ids(submap_map_, submap_include_distance_);
@@ -680,6 +906,7 @@ void NDTMapper::update_maps(const pcl::PointCloud<pcl::PointXYZI>::Ptr& scan_for
             // Update global pose graph and group submaps
             if (submap_map_[id].distance <= submap_connect_distance_
                 && current_submap_id_ - id > (int)(submap_connect_distance_ / (map_add_shift_ * submap_scan_size_)) + 1
+                && !attempting_loop_closure_
                 && !adjusted_loop_with_last_scan_)
             {
                 global_pose_graph_.add_edge(current_submap_id_, id);
@@ -687,11 +914,6 @@ void NDTMapper::update_maps(const pcl::PointCloud<pcl::PointXYZI>::Ptr& scan_for
                 group_submaps(connected_id_set);
             }
         }
-
-        // Reset submap
-        submap_scan_count_ = 0;
-        submap_.clear();
-        current_submap_id_++;
     }
 
     // Update ndt target
@@ -780,7 +1002,7 @@ void NDTMapper::points_callback(const sensor_msgs::PointCloud2ConstPtr& msg)
         SubmapWithInfo submap_with_info;
         submap_with_info = init_submap_with_info_;
         submap_with_info.points = submap_;
-        submap_map_.insert(std::make_pair(current_submap_id_++, submap_with_info));
+        submap_map_.insert(std::make_pair(current_submap_id_, submap_with_info));
         submap_.clear();
 
         // Initialize target map
