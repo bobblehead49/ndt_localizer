@@ -453,6 +453,8 @@ bool NDTMapper::get_loop_correction(const std::unordered_set<int>& target_id_set
         initial_guess_correction.x, initial_guess_correction.y, initial_guess_correction.z,
         initial_guess_correction.roll*180.0/M_PI, initial_guess_correction.pitch*180.0/M_PI, initial_guess_correction.yaw*180.0/M_PI);
 
+    ROS_INFO("Fitness score: %.3f", best_score);
+
     // Prepare corrected destination
     Eigen::Matrix4f corrected_destination = best_destination;
 
