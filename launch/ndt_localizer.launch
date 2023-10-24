@@ -13,7 +13,7 @@
     <arg name="ndt_resolution" default="2.0"/>
     <arg name="ndt_step_size" default="0.1"/>
     <arg name="ndt_transformation_epsilon" default="0.001"/>
-    <arg name="prediction_method" default="zero"/> <!-- zero, linear or odom -->
+    <arg name="prediction_method" default="linear"/> <!-- zero, linear or odom -->
     <arg name="translation_error_tolerance" default="1.5"/>
     <arg name="rotation_error_tolerance" default="15.0"/>
     <arg name="use_submaps" default="true"/>
