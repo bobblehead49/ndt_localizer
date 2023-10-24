@@ -33,7 +33,7 @@ NDTLocalizer::NDTLocalizer() : nh_(), pnh_("~"), tf_listener_(tf_buffer_)
     std::string maps_dir, map_name, prediction_method_str;
     int ndt_max_iterations;
     float ndt_resolution, ndt_step_size, ndt_transformation_epsilon;
-    float deg_error_tolerance;
+    float roation_error_tolerance_deg;
     pnh_.param<std::string>("maps_directory", maps_dir, "./");
     pnh_.param<std::string>("map_name", map_name, "map");
     pnh_.param<std::string>("map_frame", map_frame_, "map");
@@ -42,22 +42,22 @@ NDTLocalizer::NDTLocalizer() : nh_(), pnh_("~"), tf_listener_(tf_buffer_)
     pnh_.param<std::string>("points_topic", points_topic_, "/points");
     pnh_.param<std::string>("odom_topic", odom_topic_, "/odom");
     pnh_.param<float>("min_scan_range", min_scan_range_, 0.3);
-    pnh_.param<float>("max_scan_range", max_scan_range_, 100.0);
+    pnh_.param<float>("max_scan_range", max_scan_range_, 200.0);
     pnh_.param<float>("voxel_leaf_size", voxel_leaf_size_, 0.5);
     pnh_.param<int>("ndt_max_iterations", ndt_max_iterations, 30);
     pnh_.param<float>("ndt_resolution", ndt_resolution, 2.0);
     pnh_.param<float>("ndt_step_size", ndt_step_size, 0.1);
     pnh_.param<float>("ndt_transformation_epsilon", ndt_transformation_epsilon, 0.001);
-    pnh_.param<std::string>("prediction_method", prediction_method_str, "odom");
-    pnh_.param<float>("translation_error_tolerance", translation_error_tolerance_, 0.8);
-    pnh_.param<float>("rotation_error_tolerance", deg_error_tolerance, 8.0);
+    pnh_.param<std::string>("prediction_method", prediction_method_str, "linear");
+    pnh_.param<float>("translation_error_tolerance", translation_error_tolerance_, 1.5);
+    pnh_.param<float>("rotation_error_tolerance", roation_error_tolerance_deg, 15.0);
     pnh_.param<bool>("use_submaps", use_submaps_, true);
     pnh_.param<float>("submap_include_distance", submap_include_distance_, 30.0);
     pnh_.param<float>("submap_update_shift", submap_update_shift_, 5.0);
 
     // Convert parameters
     prediction_method_ = convert_prediction_method(prediction_method_str);
-    rotation_error_tolerance_ = deg_error_tolerance * M_PI / 180.0;
+    rotation_error_tolerance_ = roation_error_tolerance_deg * M_PI / 180.0;
 
     // Initialize variables
     points_initialized_ = false;

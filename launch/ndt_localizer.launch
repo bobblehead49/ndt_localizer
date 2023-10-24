@@ -1,13 +1,13 @@
 <launch>
     <arg name="maps_directory" default="$(env HOME)"/>
-    <arg name="map_name" default="map"/>    
+    <arg name="map_name" default="map"/>
     <arg name="map_frame" default="map"/>
     <arg name="base_frame" default="base_link"/>
     <arg name="lidar_frame" default="lidar"/>
     <arg name="points_topic" default="/lidar_points"/>
     <arg name="odom_topic" default="/odom"/>
     <arg name="min_scan_range" default="0.3"/>
-    <arg name="max_scan_range" default="100.0"/>
+    <arg name="max_scan_range" default="200.0"/>
     <arg name="voxel_leaf_size" default="0.5"/>
     <arg name="ndt_max_iterations" default="30"/>
     <arg name="ndt_resolution" default="2.0"/>
