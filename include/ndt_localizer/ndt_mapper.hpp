@@ -113,15 +113,16 @@ private:
 
     std::unordered_set<int> get_locally_connected_ids(const int, const float);
     void group_submaps(const std::unordered_set<int>&);
+    void publish_loop_markers(const std::map<int, Eigen::Matrix4f>& destination_matrix_map);
     std::unordered_set<int> get_loop_target_ids(const std::unordered_set<int>&);
     void get_initial_guess(const Eigen::Matrix4f& source, const Eigen::Matrix4f& target, Eigen::Matrix4f& initial_guess);
-    bool get_loop_correction(const std::unordered_set<int>& target_id_set, const Eigen::Matrix4f& initial_guess, Eigen::Matrix4f& correction);
+    bool get_loop_correction(const Eigen::Matrix4f& map2base_matrix, const std::unordered_set<int>& target_id_set, const Eigen::Matrix4f& initial_guess, Eigen::Matrix4f& correction);
     std::vector<int> get_loop_id_path(const std::unordered_set<int>&, const int);
     std::vector<int> get_grouped_loop_id_path(const std::vector<int>&);
     void adjust_angles(const Eigen::Matrix4f&, std::map<int, Eigen::Matrix4f>&);
     void adjust_positions(const Eigen::Matrix4f&, std::map<int, Eigen::Matrix4f>&);
     void shift_submaps(const std::map<int, Eigen::Matrix4f>&);
-    bool close_loop(const std::unordered_set<int>&, Pose&);
+    bool close_loop(const Eigen::Matrix4f& map2base_matrix, const std::unordered_set<int>& loop_target_id_set, Pose& base_pose);
     void update_maps(const pcl::PointCloud<pcl::PointXYZI>::Ptr&, const Eigen::Matrix4f&, Pose&);
     void odom_callback(const nav_msgs::OdometryConstPtr&);
     void points_callback(const sensor_msgs::PointCloud2ConstPtr&);
