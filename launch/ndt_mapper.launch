@@ -57,7 +57,11 @@
         <param name="submap_include_distance" value="$(arg submap_include_distance)"/>
         <param name="submap_connect_distance" value="$(arg submap_connect_distance)"/>
         <param name="use_loop_closure" value="$(arg use_loop_closure)"/>
-        <param name="loop_closure_confirmation_error" value="$(arg loop_closure_confirmation_error)"/>
+        <param name="initial_guess_resolution" value="$(arg initial_guess_resolution)"/>
+        <param name="initial_guess_count" value="$(arg initial_guess_count)"/>
+        <param name="loop_score_limit" value="$(arg loop_score_limit)"/>
+        <param name="loop_confirmation_translation_tolerance" value="$(arg loop_confirmation_translation_tolerance)"/>
+        <param name="loop_confirmation_rotation_tolerance" value="$(arg loop_confirmation_rotation_tolerance)"/>
         <param name="save_uncompressed_map" value="$(arg save_uncompressed_map)"/>
         <param name="save_submaps" value="$(arg save_submaps)"/>
     </node>
