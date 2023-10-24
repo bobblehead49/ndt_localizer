@@ -2,7 +2,7 @@
 
 ## Overview
 This package is for **3D mapping and localization using NDT** (normal-distributions transform).
-Includes a cheap edition of **loop closure** without any total optimization.  
+Includes a simple **loop closure** feature without any total optimization.  
 
 This package has been developed and tested under **ROS noetic** on **Ubuntu 20.04**.  
 
