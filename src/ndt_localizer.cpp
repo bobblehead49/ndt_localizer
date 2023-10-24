@@ -171,6 +171,12 @@ void NDTLocalizer::init_pose_callback(const geometry_msgs::PoseWithCovarianceSta
     m.getRPY(init_pose.roll, init_pose.pitch, init_pose.yaw);
 
     // Apply initial pose
+    last_base_twist_.linear.x = 0.0;
+    last_base_twist_.linear.y = 0.0;
+    last_base_twist_.linear.z = 0.0;
+    last_base_twist_.angular.x = 0.0;
+    last_base_twist_.angular.y = 0.0;
+    last_base_twist_.angular.z = 0.0;
     last_base_pose_ = init_pose;
     last_predicted_base_pose_ = init_pose;
 
@@ -204,8 +210,7 @@ void NDTLocalizer::points_callback(const sensor_msgs::PointCloud2ConstPtr& msg)
     double dt;
     if (!points_initialized_)
     {        
-        dt = 0.0;
-        last_scan_stamp_ = msg->header.stamp;
+        dt = 1.0;
         points_initialized_ = true;
     }
     else

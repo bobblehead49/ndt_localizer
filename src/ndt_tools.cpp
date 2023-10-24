@@ -126,7 +126,7 @@ Eigen::Matrix4f convert_odom2matrix(const nav_msgs::Odometry& odom)
 // Get linear prediction of next pose based on twist.
 Pose get_linear_prediction_pose(const Pose& current_pose, const geometry_msgs::Twist& twist, const double dt)
 {
-    if (dt < 0.0)
+    if (dt <= 0.0)
         return current_pose;
 
     // Calculate next rotation
