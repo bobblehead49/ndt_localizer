@@ -443,20 +443,17 @@ std::vector<int> NDTMapper::get_loop_id_path(const std::unordered_set<int>& star
 std::vector<int> NDTMapper::get_grouped_loop_id_path(const std::vector<int>& loop_id_path)
 {
     std::vector<int> grouped_loop_id_path;
-    std::unordered_map<int, int> group_id_map;
+    std::unordered_set<int> checked_groups;
     for (auto id : loop_id_path)
     {
         if (submap_map_[id].in_group)
         {
             // Skip if group is already checked
-            if (group_id_map.find(submap_map_[id].group_id) != group_id_map.end())
-            {
-                if (++group_id_map[submap_map_[id].group_id] > 5)
-                    grouped_loop_id_path.clear();
+            if (checked_groups.find(submap_map_[id].group_id) != checked_groups.end())
                 continue;
-            }
-            else
-                group_id_map[submap_map_[id].group_id] = 1;
+
+            // Add group id to checked groups
+            checked_groups.insert(submap_map_[id].group_id);
         }
         grouped_loop_id_path.push_back(id);
     }
