@@ -1,8 +1,10 @@
 <launch>
+    <env name="ROSCONSOLE_FORMAT" value="[${severity}]: [${node}] ${message}"/>
+
     <arg name="map_frame" default="map"/>
     <arg name="base_frame" default="base_link"/>
     <arg name="lidar_frame" default="lidar"/>
-    <arg name="points_topic" default="/lidar_points"/>
+    <arg name="points_topic" default="/velodyne_points"/>
     <arg name="odom_topic" default="/odom"/>
     <arg name="map_topic" default="/map"/>
     <arg name="map_publish_interval" default="15.0"/>
@@ -13,21 +15,20 @@
     <arg name="ndt_resolution" default="2.0"/>
     <arg name="ndt_step_size" default="0.1"/>
     <arg name="ndt_translation_epsilon" default="0.001"/>
-    <arg name="prediction_method" default="odom"/> <!-- zero, linear or odom -->
-    <arg name="translation_error_tolerance" default="0.8"/>
-    <arg name="rotation_error_tolerance" default="8.0"/>
+    <arg name="prediction_method" default="zero"/> <!-- zero, linear or odom -->
+    <arg name="translation_error_tolerance" default="1.5"/>
+    <arg name="rotation_error_tolerance" default="15.0"/>
     <arg name="map_add_shift" default="1.0"/>
     <arg name="submap_scan_size" default="1"/>
     <arg name="submap_include_distance" default="30.0"/>
-    <arg name="submap_connect_distance" default="5.0"/>
+    <arg name="submap_connect_distance" default="8.0"/>
     <arg name="use_loop_closure" default="true"/>
-    <arg name="loop_connect_distance" default="15.0"/>
-    <arg name="loop_closure_confirmation_error" default="0.05"/>
-    <arg name="save_uncompressed_map" default="false"/>
+    <arg name="loop_closure_confirmation_error" default="0.1"/>
+    <arg name="save_uncompressed_map" default="true"/>
     <arg name="save_submaps" default="true"/>
     <arg name="use_rviz" default="true"/>
 
-    <node pkg="rviz" type="rviz" name="rviz" args="-d $(find ndt_localizer)/config/mapping.rviz" if="$(arg use_rviz)" />
+    <node pkg="rviz" type="rviz" name="rviz" args="-d $(dirname)/../config/mapping.rviz" if="$(arg use_rviz)" />
 
     <node pkg="ndt_localizer" type="ndt_mapper" name="ndt_mapper" output="screen" >
         <param name="map_frame" value="$(arg map_frame)"/>
@@ -52,7 +53,6 @@
         <param name="submap_include_distance" value="$(arg submap_include_distance)"/>
         <param name="submap_connect_distance" value="$(arg submap_connect_distance)"/>
         <param name="use_loop_closure" value="$(arg use_loop_closure)"/>
-        <param name="loop_connect_distance" value="$(arg loop_connect_distance)"/>
         <param name="loop_closure_confirmation_error" value="$(arg loop_closure_confirmation_error)"/>
         <param name="save_uncompressed_map" value="$(arg save_uncompressed_map)"/>
         <param name="save_submaps" value="$(arg save_submaps)"/>
