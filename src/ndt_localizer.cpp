@@ -33,7 +33,7 @@ NDTLocalizer::NDTLocalizer() : nh_(), pnh_("~"), tf_listener_(tf_buffer_)
     std::string maps_dir, map_name, prediction_method_str;
     int ndt_max_iterations;
     float ndt_resolution, ndt_step_size, ndt_transformation_epsilon;
-    float roation_error_tolerance_deg;
+    float rotation_error_tolerance_deg;
     pnh_.param<std::string>("maps_directory", maps_dir, "./");
     pnh_.param<std::string>("map_name", map_name, "map");
     pnh_.param<std::string>("map_frame", map_frame_, "map");
@@ -50,14 +50,14 @@ NDTLocalizer::NDTLocalizer() : nh_(), pnh_("~"), tf_listener_(tf_buffer_)
     pnh_.param<float>("ndt_transformation_epsilon", ndt_transformation_epsilon, 0.001);
     pnh_.param<std::string>("prediction_method", prediction_method_str, "linear");
     pnh_.param<float>("translation_error_tolerance", translation_error_tolerance_, 1.5);
-    pnh_.param<float>("rotation_error_tolerance", roation_error_tolerance_deg, 15.0);
+    pnh_.param<float>("rotation_error_tolerance", rotation_error_tolerance_deg, 15.0);
     pnh_.param<bool>("use_submaps", use_submaps_, true);
     pnh_.param<float>("submap_include_distance", submap_include_distance_, 30.0);
     pnh_.param<float>("submap_update_shift", submap_update_shift_, 5.0);
 
     // Convert parameters
     prediction_method_ = convert_prediction_method(prediction_method_str);
-    rotation_error_tolerance_ = roation_error_tolerance_deg * M_PI / 180.0;
+    rotation_error_tolerance_ = rotation_error_tolerance_deg * M_PI / 180.0;
 
     // Initialize variables
     points_initialized_ = false;
@@ -136,13 +136,26 @@ void NDTLocalizer::odom_callback(const nav_msgs::OdometryConstPtr& msg)
 {
     if (!odom_initialized_)
     {
-        last_predicted_stamp_ = msg->header.stamp;
+        last_odom_ = *msg;
         odom_initialized_ = true;
+        return;
     }
-    double dt;
-    dt = (msg->header.stamp - last_predicted_stamp_).toSec();
-    last_predicted_base_pose_ = get_linear_prediction_pose(last_base_pose_, msg->twist.twist, dt);
-    last_predicted_stamp_ = msg->header.stamp;
+
+    // Get odom matrices
+    Eigen::Matrix4f current_odom_matrix, last_odom_matrix;
+    current_odom_matrix = convert_odom2matrix(*msg);
+    last_odom_matrix = convert_odom2matrix(last_odom_);
+
+    // Get map to base matrices
+    Eigen::Matrix4f map2base_matrix, last_map2base_matrix;
+    last_map2base_matrix = convert_pose2matrix(last_predicted_base_pose_);
+    map2base_matrix = last_map2base_matrix * last_odom_matrix.inverse() * current_odom_matrix;
+
+    // Update prediction
+    last_predicted_base_pose_ = convert_matrix2pose(map2base_matrix);
+
+    // Set values for next callback
+    last_odom_ = *msg;
 }
 
 // Callback for initial pose messages
@@ -375,7 +388,6 @@ void NDTLocalizer::points_callback(const sensor_msgs::PointCloud2ConstPtr& msg)
     last_base_pose_ = base_pose;
     last_scan_stamp_ = msg->header.stamp;
     last_predicted_base_pose_ = base_pose;
-    last_predicted_stamp_ = msg->header.stamp;
 }
 
 int main(int argc, char** argv)

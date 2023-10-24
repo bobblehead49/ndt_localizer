@@ -21,8 +21,8 @@
 class NDTLocalizer
 {
 public:
-  NDTLocalizer();
-  ~NDTLocalizer();
+    NDTLocalizer();
+    ~NDTLocalizer();
 
 private:
     ros::NodeHandle nh_;
@@ -40,13 +40,14 @@ private:
     ros::Publisher trans_prob_pub_;    
 
     ros::Time last_scan_stamp_;
-    ros::Time last_predicted_stamp_;
 
     tf2_ros::Buffer tf_buffer_;
     tf2_ros::TransformListener tf_listener_;
     tf2_ros::TransformBroadcaster tf_broadcaster_;
 
     geometry_msgs::Twist last_base_twist_;
+
+    nav_msgs::Odometry last_odom_;
 
     std::string map_frame_;
     std::string base_frame_;

@@ -784,31 +784,15 @@ void NDTMapper::odom_callback(const nav_msgs::OdometryConstPtr& msg)
         return;
     }
 
-    // Get current and last odom matrices
-    Eigen::Matrix4f current_odom_matrix, last_odom_matrix, last_odom_translation_matrix, last_odom_orientation_matrix, last_map2base_matrix;
+    // Get odom matrices
+    Eigen::Matrix4f current_odom_matrix, last_odom_matrix;
     current_odom_matrix = convert_odom2matrix(*msg);
     last_odom_matrix = convert_odom2matrix(last_odom_);
-    last_odom_translation_matrix = last_odom_matrix;
-    last_odom_translation_matrix.block<3, 3>(0, 0) = Eigen::Matrix3f::Identity();
-    last_odom_orientation_matrix = last_odom_matrix;
-    last_odom_orientation_matrix.block<3, 1>(0, 3) = Eigen::Vector3f::Zero();
-    last_map2base_matrix = convert_pose2matrix(last_base_pose_);
 
-    // Get map to base matrix
-    Eigen::Matrix4f transform_matrix, map2base_matrix;
-    transform_matrix = last_odom_translation_matrix.inverse() * current_odom_matrix;
-    transform_matrix = last_odom_orientation_matrix.inverse() * transform_matrix;
-    Pose transform_pose;
-    transform_pose = convert_matrix2pose(transform_matrix);
-    float ratio = 10.0;
-    transform_pose.x *= ratio;
-    transform_pose.y *= ratio;
-    transform_pose.z *= ratio;
-    transform_pose.roll *= ratio;
-    transform_pose.pitch *= ratio;
-    transform_pose.yaw *= ratio;
-    transform_matrix = convert_pose2matrix(transform_pose);
-    map2base_matrix = last_map2base_matrix * transform_matrix;
+    // Get map to base matrices
+    Eigen::Matrix4f map2base_matrix, last_map2base_matrix;
+    last_map2base_matrix = convert_pose2matrix(last_predicted_base_pose_);
+    map2base_matrix = last_map2base_matrix * last_odom_matrix.inverse() * current_odom_matrix;
 
     // Update prediction
     last_predicted_base_pose_ = convert_matrix2pose(map2base_matrix);
