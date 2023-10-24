@@ -90,7 +90,11 @@ private:
     float submap_include_distance_;
     float map_publish_interval_;
     float submap_connect_distance_;
-    float loop_closure_confirmation_error_;
+    float initial_guess_resolution_;
+    float initial_guess_count_;
+    float loop_score_limit_;
+    float loop_confirmation_translation_tolerance_;
+    float loop_confirmation_rotation_tolerance_;
 
     Eigen::Matrix4f base2lidar_matrix_;
     Eigen::Matrix4f lidar2base_matrix_;

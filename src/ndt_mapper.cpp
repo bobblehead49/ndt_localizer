@@ -44,7 +44,7 @@ NDTMapper::NDTMapper() : nh_(), pnh_("~"), tf_listener_(tf_buffer_)
     std::string prediction_method_str;
     int ndt_max_iterations;
     float ndt_resolution, ndt_step_size, ndt_transformation_epsilon;
-    float deg_error_tolerance;
+    float roation_error_tolerance_deg, loop_confirmation_rotation_tolerance_deg;
     pnh_.param<std::string>("map_frame", map_frame_, "map");
     pnh_.param<std::string>("base_frame", base_frame_, "base_link");
     pnh_.param<std::string>("lidar_frame", lidar_frame_, "lidar");
@@ -53,27 +53,32 @@ NDTMapper::NDTMapper() : nh_(), pnh_("~"), tf_listener_(tf_buffer_)
     pnh_.param<std::string>("map_topic", map_topic_, "/map");
     pnh_.param<float>("map_publish_interval", map_publish_interval_, 15.0);
     pnh_.param<float>("min_scan_range", min_scan_range_, 0.3);
-    pnh_.param<float>("max_scan_range", max_scan_range_, 100.0);
+    pnh_.param<float>("max_scan_range", max_scan_range_, 200.0);
     pnh_.param<float>("voxel_leaf_size", voxel_leaf_size_, 0.5);
     pnh_.param<int>("ndt_max_iterations", ndt_max_iterations, 30);
     pnh_.param<float>("ndt_resolution", ndt_resolution, 2.0);
     pnh_.param<float>("ndt_step_size", ndt_step_size, 0.1);
     pnh_.param<float>("ndt_transformation_epsilon", ndt_transformation_epsilon, 0.001);
-    pnh_.param<std::string>("prediction_method", prediction_method_str, "odom");
-    pnh_.param<float>("translation_error_tolerance", translation_error_tolerance_, 0.8);
-    pnh_.param<float>("rotation_error_tolerance", deg_error_tolerance, 8.0);
+    pnh_.param<std::string>("prediction_method", prediction_method_str, "linear");
+    pnh_.param<float>("translation_error_tolerance", translation_error_tolerance_, 1.5);
+    pnh_.param<float>("rotation_error_tolerance", roation_error_tolerance_deg, 15.0);
     pnh_.param<float>("map_add_shift", map_add_shift_, 1.0);
     pnh_.param<int>("submap_scan_size", submap_scan_size_, 1);
     pnh_.param<float>("submap_include_distance", submap_include_distance_, 30.0);
     pnh_.param<float>("submap_connect_distance", submap_connect_distance_, 8.0);
     pnh_.param<bool>("use_loop_closure", use_loop_closure_, true);
-    pnh_.param<float>("loop_closure_confirmation_error", loop_closure_confirmation_error_, 0.05);
+    pnh_.param<float>("initial_guess_resolution", initial_guess_resolution_, 1.0);
+    pnh_.param<float>("initial_guess_count", initial_guess_count_, 1);
+    pnh_.param<float>("loop_score_limit", loop_score_limit_, 100.0);
+    pnh_.param<float>("loop_confirmation_translation_tolerance", loop_confirmation_translation_tolerance_, 0.05);
+    pnh_.param<float>("loop_confirmation_rotation_tolerance", loop_confirmation_rotation_tolerance_deg, 0.1);
     pnh_.param<bool>("save_uncompressed_map", save_uncompressed_map_, true);
     pnh_.param<bool>("save_submaps", save_submaps_, true);
 
     // Convert parameters
     prediction_method_ = convert_prediction_method(prediction_method_str);
-    rotation_error_tolerance_ = deg_error_tolerance * M_PI / 180.0;
+    rotation_error_tolerance_ = roation_error_tolerance_deg * M_PI / 180.0;
+    loop_confirmation_rotation_tolerance_ = loop_confirmation_rotation_tolerance_deg * M_PI / 180.0;
 
     // Initialize variables
     map_initialized_ = false;
@@ -399,7 +404,7 @@ bool NDTMapper::get_loop_correction(const Eigen::Matrix4f& map2base_matrix, cons
     Eigen::Matrix4f best_destination = Eigen::Matrix4f::Identity();
     float best_score = std::numeric_limits<float>::max();
     bool best_convergence = false;
-    for (int i = 0; i < 2; i++)
+    for (int i = 0; i < initial_guess_count_+1 ; i++)
     {
         ROS_INFO("Loop closure trial: %d", i);
 
@@ -412,8 +417,8 @@ bool NDTMapper::get_loop_correction(const Eigen::Matrix4f& map2base_matrix, cons
                 if (x == i || y == i || x == -i || y == -i)
                 {
                     Eigen::Matrix4f shifted_initial_guess = initial_guess;
-                    shifted_initial_guess(0, 3) += 1.0 * x;
-                    shifted_initial_guess(1, 3) += 1.0 * y;
+                    shifted_initial_guess(0, 3) += initial_guess_resolution_ * x;
+                    shifted_initial_guess(1, 3) += initial_guess_resolution_ * y;
                     initial_guess_vector.push_back(shifted_initial_guess);
                 }
             }
@@ -452,22 +457,11 @@ bool NDTMapper::get_loop_correction(const Eigen::Matrix4f& map2base_matrix, cons
         ROS_INFO("Best pose:\n %.3f, %.3f, %.3f, %.3f, %.3f, %.3f",
             best_destination_pose.x, best_destination_pose.y, best_destination_pose.z,
             best_destination_pose.roll*180.0/M_PI, best_destination_pose.pitch*180.0/M_PI, best_destination_pose.yaw*180.0/M_PI);
-
-        if (best_score < 0.4 || best_score > 1000.0) break;
     }
 
-    // Get initial destination guess
-    Eigen::Matrix4f initial_destination_guess =
-        initial_guess * source;
-
     // Check if loop closure is acceptable
-    Pose initial_guess_correction =
-        convert_matrix2pose(initial_destination_guess.inverse() * best_destination);
-    float correction_distance_2d =
-        sqrt(initial_guess_correction.x * initial_guess_correction.x + initial_guess_correction.y * initial_guess_correction.y);
-    if (correction_distance_2d > 10.0
-        || !best_convergence
-        || best_score > 1000.0)
+    if (!best_convergence
+        || best_score > loop_score_limit_)
     {
         ROS_WARN("Loop closure failed. Fitness score: %.3f", best_score);
         return false;
@@ -667,17 +661,17 @@ bool NDTMapper::close_loop(const Eigen::Matrix4f& map2base_matrix, const std::un
     // Get loop correction distance
     Pose loop_correction_pose =
         convert_matrix2pose(source_matrix.inverse() * final_destination_matrix);
-    float loop_correction_distance_2d =
-        sqrt(loop_correction_pose.x * loop_correction_pose.x + loop_correction_pose.y * loop_correction_pose.y);
+    float loop_correction_distance =
+        sqrt(loop_correction_pose.x * loop_correction_pose.x + loop_correction_pose.y * loop_correction_pose.y + loop_correction_pose.z * loop_correction_pose.z);
 
     // Continue loop closure if loop correction is large
-    ROS_INFO("Loop correction 2d distance: %.3f", loop_correction_distance_2d);
-    ROS_INFO("Loop correction z distance: %.3f", loop_correction_pose.z);
+    ROS_INFO("Loop correction distance: %.3f", loop_correction_distance);
     ROS_INFO("Loop correction roll pitch yaw: %.3f, %.3f, %.3f",
         loop_correction_pose.roll*180.0/M_PI, loop_correction_pose.pitch*180.0/M_PI, loop_correction_pose.yaw*180.0/M_PI);
-    if (loop_correction_distance_2d > loop_closure_confirmation_error_
-        || abs(loop_correction_pose.z) > loop_closure_confirmation_error_
-        || abs(loop_correction_pose.yaw) > 0.08 * M_PI / 180.0)
+    if (loop_correction_distance > loop_confirmation_translation_tolerance_
+        || abs(loop_correction_pose.roll) > loop_confirmation_rotation_tolerance_
+        || abs(loop_correction_pose.pitch) > loop_confirmation_rotation_tolerance_
+        || abs(loop_correction_pose.yaw) > loop_confirmation_rotation_tolerance_)
         return true;
 
     // Update global pose graph

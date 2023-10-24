@@ -4,12 +4,12 @@
     <arg name="map_frame" default="map"/>
     <arg name="base_frame" default="base_link"/>
     <arg name="lidar_frame" default="lidar"/>
-    <arg name="points_topic" default="/velodyne_points"/>
+    <arg name="points_topic" default="/lidar_points"/>
     <arg name="odom_topic" default="/odom"/>
     <arg name="map_topic" default="/map"/>
     <arg name="map_publish_interval" default="15.0"/>
     <arg name="min_scan_range" default="0.3"/>
-    <arg name="max_scan_range" default="100.0"/>
+    <arg name="max_scan_range" default="200.0"/>
     <arg name="voxel_leaf_size" default="0.5"/>
     <arg name="ndt_max_iterations" default="30"/>
     <arg name="ndt_resolution" default="2.0"/>
@@ -23,7 +23,11 @@
     <arg name="submap_include_distance" default="30.0"/>
     <arg name="submap_connect_distance" default="8.0"/>
     <arg name="use_loop_closure" default="true"/>
-    <arg name="loop_closure_confirmation_error" default="0.1"/>
+    <arg name="initial_guess_resolution" default="1.0"/>
+    <arg name="initial_guess_count" default="1"/>
+    <arg name="loop_score_limit" default="100.0"/>
+    <arg name="loop_confirmation_translation_tolerance" default="0.05"/>
+    <arg name="loop_confirmation_rotation_tolerance" default="0.1"/>
     <arg name="save_uncompressed_map" default="true"/>
     <arg name="save_submaps" default="true"/>
     <arg name="use_rviz" default="true"/>
