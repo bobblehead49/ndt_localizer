@@ -113,7 +113,7 @@ private:
 
     std::unordered_set<int> get_locally_connected_ids(const int, const float);
     void group_submaps(const std::unordered_set<int>&);
-    void publish_loop_markers(const std::map<int, Eigen::Matrix4f>& destination_matrix_map);
+    void publish_loop_markers(const Eigen::Matrix4f& target_matrix, const Eigen::Matrix4f& guess_matrix, const std::map<int, Eigen::Matrix4f>& destination_matrix_map);
     std::unordered_set<int> get_loop_target_ids(const std::unordered_set<int>&);
     void get_initial_guess(const Eigen::Matrix4f& source, const Eigen::Matrix4f& target, Eigen::Matrix4f& initial_guess);
     bool get_loop_correction(const Eigen::Matrix4f& map2base_matrix, const std::unordered_set<int>& target_id_set, const Eigen::Matrix4f& initial_guess, Eigen::Matrix4f& correction);

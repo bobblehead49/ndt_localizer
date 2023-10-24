@@ -198,40 +198,99 @@ void NDTMapper::group_submaps(const std::unordered_set<int>& connected_id_set)
     }
 }
 
-void NDTMapper::publish_loop_markers(const std::map<int, Eigen::Matrix4f>& destination_matrix_map)
+void NDTMapper::publish_loop_markers(const Eigen::Matrix4f& target_matrix, const Eigen::Matrix4f& guess_matrix, const std::map<int, Eigen::Matrix4f>& destination_matrix_map)
 {
     // Create marker array of destination matrices
     visualization_msgs::MarkerArray loop_marker_array;
 
+    // Create loop marker
+    visualization_msgs::Marker loop_marker;
+    loop_marker.header.frame_id = map_frame_;
+    loop_marker.header.stamp = current_scan_stamp_;
+    loop_marker.action = visualization_msgs::Marker::ADD;
+    loop_marker.color.a = 1.0;
+    loop_marker.lifetime = ros::Duration(30.0);
+
+    // Add target marker
+    loop_marker.ns = "target_marker";
+    loop_marker.type = visualization_msgs::Marker::ARROW;
+    loop_marker.scale.x = 1.0 * map_add_shift_;
+    loop_marker.scale.y = 0.2;
+    loop_marker.scale.z = 0.2;
+    loop_marker.color.r = 1.0;
+    loop_marker.color.g = 0.0;
+    loop_marker.color.b = 1.0;
+    loop_marker.id = -1;
+    loop_marker.pose.position.x = target_matrix(0, 3);
+    loop_marker.pose.position.y = target_matrix(1, 3);
+    loop_marker.pose.position.z = target_matrix(2, 3);
+    Eigen::Quaternionf target_quaternion(target_matrix.block<3, 3>(0, 0));
+    loop_marker.pose.orientation.x = target_quaternion.x();
+    loop_marker.pose.orientation.y = target_quaternion.y();
+    loop_marker.pose.orientation.z = target_quaternion.z();
+    loop_marker.pose.orientation.w = target_quaternion.w();
+    loop_marker_array.markers.push_back(loop_marker);
+
+    // Add target text marker
+    loop_marker.type = visualization_msgs::Marker::TEXT_VIEW_FACING;
+    loop_marker.scale.x = 1.0;
+    loop_marker.scale.y = 1.0;
+    loop_marker.scale.z = 1.0;
+    loop_marker.id = -2;
+    loop_marker.text = "Target";
+    loop_marker.pose.position.z = target_matrix(2, 3) - 1.0;
+    loop_marker_array.markers.push_back(loop_marker);
+
+    // Add guess marker
+    loop_marker.ns = "guess_marker";
+    loop_marker.type = visualization_msgs::Marker::ARROW;
+    loop_marker.scale.x = 1.0 * map_add_shift_;
+    loop_marker.scale.y = 0.2;
+    loop_marker.scale.z = 0.2;
+    loop_marker.color.r = 0.0;
+    loop_marker.color.g = 1.0;
+    loop_marker.color.b = 0.0;
+    loop_marker.id = -3;
+    loop_marker.pose.position.x = guess_matrix(0, 3);
+    loop_marker.pose.position.y = guess_matrix(1, 3);
+    loop_marker.pose.position.z = guess_matrix(2, 3);
+    Eigen::Quaternionf guess_quaternion(guess_matrix.block<3, 3>(0, 0));
+    loop_marker.pose.orientation.x = guess_quaternion.x();
+    loop_marker.pose.orientation.y = guess_quaternion.y();
+    loop_marker.pose.orientation.z = guess_quaternion.z();
+    loop_marker.pose.orientation.w = guess_quaternion.w();
+    loop_marker_array.markers.push_back(loop_marker);
+
+    // Add guess text marker
+    loop_marker.type = visualization_msgs::Marker::TEXT_VIEW_FACING;
+    loop_marker.scale.x = 1.0;
+    loop_marker.scale.y = 1.0;
+    loop_marker.scale.z = 1.0;
+    loop_marker.id = -4;
+    loop_marker.text = "Guess";
+    loop_marker.pose.position.z = guess_matrix(2, 3) - 1.0;
+    loop_marker_array.markers.push_back(loop_marker);
+
     // Add loop markers
+    loop_marker.ns = "loop_closure_markers";
+    loop_marker.type = visualization_msgs::Marker::ARROW;
+    loop_marker.scale.x = 0.8 * map_add_shift_;
+    loop_marker.scale.y = 0.1;
+    loop_marker.scale.z = 0.1;
+    loop_marker.color.r = 1.0;
+    loop_marker.color.g = 0.0;
+    loop_marker.color.b = 0.0;
     for (auto it = destination_matrix_map.begin(); it != destination_matrix_map.end(); it++)
     {
-        // Get destination quaternion
-        Eigen::Quaternionf quaternion(it->second.block<3, 3>(0, 0));
-
-        // Create loop marker
-        visualization_msgs::Marker loop_marker;
-        loop_marker.header.frame_id = map_frame_;
-        loop_marker.header.stamp = current_scan_stamp_;
-        loop_marker.ns = "loop_closure_markers";
         loop_marker.id = it->first;
-        loop_marker.type = visualization_msgs::Marker::ARROW;
-        loop_marker.action = visualization_msgs::Marker::ADD;
         loop_marker.pose.position.x = it->second(0, 3);
         loop_marker.pose.position.y = it->second(1, 3);
         loop_marker.pose.position.z = it->second(2, 3);
+        Eigen::Quaternionf quaternion(it->second.block<3, 3>(0, 0));
         loop_marker.pose.orientation.x = quaternion.x();
         loop_marker.pose.orientation.y = quaternion.y();
         loop_marker.pose.orientation.z = quaternion.z();
         loop_marker.pose.orientation.w = quaternion.w();
-        loop_marker.scale.x = 0.8 * map_add_shift_;
-        loop_marker.scale.y = 0.1;
-        loop_marker.scale.z = 0.1;
-        loop_marker.color.a = 1.0;
-        loop_marker.color.r = 1.0;
-        loop_marker.color.g = 0.0;
-        loop_marker.color.b = 0.0;
-        loop_marker.lifetime = ros::Duration(10.0);
         loop_marker_array.markers.push_back(loop_marker);
     }
 
@@ -548,22 +607,6 @@ bool NDTMapper::close_loop(const Eigen::Matrix4f& map2base_matrix, const std::un
     Eigen::Matrix4f initial_guess_matrix;
     get_initial_guess(source_matrix, target_matrix, initial_guess_matrix);
 
-    // Publish target tf
-    geometry_msgs::TransformStamped target_tf =
-        convert_matrix2tf(target_matrix);
-    target_tf.header.stamp = current_scan_stamp_;
-    target_tf.header.frame_id = map_frame_;
-    target_tf.child_frame_id = "target";
-    tf_broadcaster_.sendTransform(target_tf);
-
-    // Publish initial guess tf
-    geometry_msgs::TransformStamped initial_guess_tf =
-        convert_matrix2tf(initial_guess_matrix * source_matrix);
-    initial_guess_tf.header.stamp = current_scan_stamp_;
-    initial_guess_tf.header.frame_id = map_frame_;
-    initial_guess_tf.child_frame_id = "initial_guess";
-    tf_broadcaster_.sendTransform(initial_guess_tf);
-
     // Get loop correction
     bool valid_loop_closure;
     Eigen::Matrix4f loop_correction_matrix;
@@ -612,7 +655,7 @@ bool NDTMapper::close_loop(const Eigen::Matrix4f& map2base_matrix, const std::un
     shift_submaps(destination_matrix_map);
 
     // Publish loop markers
-    publish_loop_markers(destination_matrix_map);
+    publish_loop_markers(target_matrix, initial_guess_matrix * source_matrix, destination_matrix_map);
 
     // Update base pose
     Eigen::Matrix4f shifted_map2base_matrix;
