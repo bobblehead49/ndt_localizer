@@ -24,10 +24,10 @@
     <arg name="submap_connect_distance" default="8.0"/>
     <arg name="use_loop_closure" default="true"/>
     <arg name="initial_guess_resolution" default="1.0"/>
-    <arg name="initial_guess_count" default="1"/>
+    <arg name="initial_guess_count" default="2"/>
     <arg name="loop_score_limit" default="100.0"/>
-    <arg name="loop_confirmation_translation_tolerance" default="0.05"/>
-    <arg name="loop_confirmation_rotation_tolerance" default="0.1"/>
+    <arg name="loop_confirmation_translation_tolerance" default="0.1"/>
+    <arg name="loop_confirmation_rotation_tolerance" default="0.5"/>
     <arg name="save_uncompressed_map" default="true"/>
     <arg name="save_submaps" default="true"/>
     <arg name="use_rviz" default="true"/>
