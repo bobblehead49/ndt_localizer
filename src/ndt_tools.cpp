@@ -22,7 +22,6 @@
 #include <tf2_geometry_msgs/tf2_geometry_msgs.h>
 
 
-// Clamps radians between -pi and pi
 double diff_radian(const double rad_1, const double rad_2)
 {
     double rad_diff;
@@ -34,8 +33,6 @@ double diff_radian(const double rad_1, const double rad_2)
     return rad_diff;
 }
 
-// Gets transform from source_frame to target_frame.
-// Returns true if successful, false otherwise.
 bool get_tf(const tf2_ros::Buffer& tf_buffer, const std::string& target_frame, const std::string& source_frame, geometry_msgs::TransformStamped& transform)
 {
     try
@@ -50,8 +47,6 @@ bool get_tf(const tf2_ros::Buffer& tf_buffer, const std::string& target_frame, c
     }
 }
 
-// Converts method string to enum.
-// Terminates the program if an invalid string is given.
 PredictionMethod convert_prediction_method(const std::string& prediction_method_str)
 {
     PredictionMethod prediction_method;
@@ -78,19 +73,16 @@ PredictionMethod convert_prediction_method(const std::string& prediction_method_
     exit(1);
 }
 
-// Converts eigen transform matrix to tf.
 geometry_msgs::TransformStamped convert_matrix2tf(const Eigen::Matrix4f& matrix)
 {
     return tf2::eigenToTransform(Eigen::Affine3f(matrix).cast<double>());
 }
 
-// Converts tf to eigen transform matrix.
 Eigen::Matrix4f convert_tf2matrix(const geometry_msgs::TransformStamped& transform)
 {
     return tf2::transformToEigen(transform).matrix().cast<float>();
 }
 
-// Converts eigen transform matrix to pose.
 Pose convert_matrix2pose(const Eigen::Matrix4f& matrix)
 {
     tf2::Matrix3x3 tf_matrix;
@@ -105,7 +97,6 @@ Pose convert_matrix2pose(const Eigen::Matrix4f& matrix)
     return pose;
 }
 
-// Converts pose to eigen transform matrix.
 Eigen::Matrix4f convert_pose2matrix(const Pose& pose)
 {
     Eigen::Translation3f translation(pose.x, pose.y, pose.z);
@@ -115,7 +106,6 @@ Eigen::Matrix4f convert_pose2matrix(const Pose& pose)
     return (translation * rotation_z * rotation_y * rotation_x).matrix();
 }
 
-// Converts odometry to eigen transform matrix.
 Eigen::Matrix4f convert_odom2matrix(const nav_msgs::Odometry& odom)
 {
     Eigen::Translation3f translation(odom.pose.pose.position.x, odom.pose.pose.position.y, odom.pose.pose.position.z);
@@ -123,7 +113,6 @@ Eigen::Matrix4f convert_odom2matrix(const nav_msgs::Odometry& odom)
     return (translation * quaternion).matrix();
 }
 
-// Get linear prediction of next pose based on twist.
 Pose get_linear_prediction_pose(const Pose& current_pose, const geometry_msgs::Twist& twist, const double dt)
 {
     if (dt <= 0.0)
@@ -157,7 +146,6 @@ Pose get_linear_prediction_pose(const Pose& current_pose, const geometry_msgs::T
     return next_pose;
 }
 
-// Gets neighbor submap ids.
 std::unordered_set<int> get_neighbor_ids(const std::map<int, SubmapWithInfo>& submap_map, const float include_distance)
 {
     std::unordered_set<int> neighbor_id_set;
@@ -169,7 +157,6 @@ std::unordered_set<int> get_neighbor_ids(const std::map<int, SubmapWithInfo>& su
     return neighbor_id_set;
 }
 
-// Point cloud range filter.
 void apply_range_filter(const pcl::PointCloud<pcl::PointXYZI>::Ptr& scan, pcl::PointCloud<pcl::PointXYZI>::Ptr& scan_filtered, const float min_scan_range, const float max_scan_range)
 {
     for (auto it = scan->begin(); it != scan->end(); ++it)
@@ -182,7 +169,6 @@ void apply_range_filter(const pcl::PointCloud<pcl::PointXYZI>::Ptr& scan, pcl::P
     }
 }
 
-// Point cloud voxel grid filter.
 void apply_voxel_grid_filter(const pcl::PointCloud<pcl::PointXYZI>::Ptr& scan, pcl::PointCloud<pcl::PointXYZI>::Ptr& scan_filtered, const float voxel_leaf_size)
 {
     pcl::VoxelGrid<pcl::PointXYZI> voxel_grid_filter;
@@ -191,7 +177,6 @@ void apply_voxel_grid_filter(const pcl::PointCloud<pcl::PointXYZI>::Ptr& scan, p
     voxel_grid_filter.filter(*scan_filtered);
 }
 
-// Load full map from pcd file.
 void load_full_map(const std::string& filepath, pcl::PointCloud<pcl::PointXYZI>& map)
 {
     ROS_INFO_STREAM("Loading pcd file: " << filepath << ". Please wait.");
