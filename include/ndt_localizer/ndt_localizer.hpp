@@ -21,7 +21,14 @@
 class NDTLocalizer
 {
 public:
+    /**
+     * \brief Constructor
+    */
     NDTLocalizer();
+
+    /**
+     * \brief Destructor
+    */
     ~NDTLocalizer();
 
 private:
@@ -83,8 +90,22 @@ private:
 
     PredictionMethod prediction_method_;
 
+    /** 
+     * \brief Executed when a odom topic is received.
+     * \param msg The received message.
+     */
     void odom_callback(const nav_msgs::Odometry::ConstPtr &msg);
+
+    /**
+     * \brief Executed when a initial pose topic is received.
+     * \param msg The received message.
+     */
     void init_pose_callback(const geometry_msgs::PoseWithCovarianceStamped::ConstPtr &msg);
+
+    /**
+     * \brief Executed when a points topic is received.
+     * \param msg The received message.
+     */
     void points_callback(const sensor_msgs::PointCloud2::ConstPtr &msg);
 };
 

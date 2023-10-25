@@ -26,7 +26,6 @@
 #include <tf2_geometry_msgs/tf2_geometry_msgs.h>
 
 
-// Constructor
 NDTLocalizer::NDTLocalizer() : nh_(), pnh_("~"), tf_listener_(tf_buffer_)
 {
     // Get parameters
@@ -127,11 +126,8 @@ NDTLocalizer::NDTLocalizer() : nh_(), pnh_("~"), tf_listener_(tf_buffer_)
     lidar2base_matrix_ = base2lidar_matrix_.inverse();
 }
 
-
-// Destructor
 NDTLocalizer::~NDTLocalizer(){}
 
-// Callback for odometry messages
 void NDTLocalizer::odom_callback(const nav_msgs::OdometryConstPtr& msg)
 {
     if (!odom_initialized_)
@@ -158,7 +154,6 @@ void NDTLocalizer::odom_callback(const nav_msgs::OdometryConstPtr& msg)
     last_odom_ = *msg;
 }
 
-// Callback for initial pose messages
 void NDTLocalizer::init_pose_callback(const geometry_msgs::PoseWithCovarianceStampedConstPtr& msg)
 {
     // Convert initial pose
@@ -201,7 +196,6 @@ void NDTLocalizer::init_pose_callback(const geometry_msgs::PoseWithCovarianceSta
     ROS_INFO("Initial pose received.");
 }
 
-// Callback for point cloud messages
 void NDTLocalizer::points_callback(const sensor_msgs::PointCloud2ConstPtr& msg)
 {
     if (!ros::ok() || !pose_initialized_)
