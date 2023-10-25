@@ -37,7 +37,6 @@
 #include <tf2_geometry_msgs/tf2_geometry_msgs.h>
 
 
-// Constructor
 NDTMapper::NDTMapper() : nh_(), pnh_("~"), tf_listener_(tf_buffer_)
 {
     // Get parameters
@@ -127,10 +126,8 @@ NDTMapper::NDTMapper() : nh_(), pnh_("~"), tf_listener_(tf_buffer_)
     marker_pub_ = nh_.advertise<visualization_msgs::MarkerArray>("/ndt_mapper/marker", 1);
 }
 
-// Destructor
 NDTMapper::~NDTMapper(){}
 
-// Gets the submap ids to include in the target map.
 std::unordered_set<int> NDTMapper::get_locally_connected_ids(const int target_id, const float include_distance)
 {
     std::unordered_set<int> connected_id_set;
@@ -153,7 +150,6 @@ std::unordered_set<int> NDTMapper::get_locally_connected_ids(const int target_id
     return connected_id_set;
 }
 
-// Classifies submaps to a group.
 void NDTMapper::group_submaps(const std::unordered_set<int>& connected_id_set)
 {
     // Get search area for nearby groups.
@@ -303,7 +299,6 @@ void NDTMapper::publish_loop_markers(const Eigen::Matrix4f& target_matrix, const
     marker_pub_.publish(loop_marker_array);
 }
 
-// Gets the target submap ids for loop closure.
 std::unordered_set<int> NDTMapper::get_loop_target_ids(const std::unordered_set<int>& connected_id_set)
 {
     std::unordered_set<int> loop_target_id_set;
@@ -324,17 +319,17 @@ std::unordered_set<int> NDTMapper::get_loop_target_ids(const std::unordered_set<
     return target_map_id_set;
 }
 
-void NDTMapper::get_initial_guess(const Eigen::Matrix4f& source, const Eigen::Matrix4f& target, Eigen::Matrix4f& initial_guess)
+void NDTMapper::get_initial_guess(const Eigen::Matrix4f& source_matrix, const Eigen::Matrix4f& target_matrix, Eigen::Matrix4f& initial_guess_matrix)
 {
     // Get relative matrix
     Eigen::Matrix4f source_translation_matrix, source_orientation_matrix, target_translation_matrix, target_orientation_matrix, relative_matrix;
-    source_translation_matrix = source_orientation_matrix = source;
+    source_translation_matrix = source_orientation_matrix = source_matrix;
     source_translation_matrix.block<3, 3>(0, 0) = Eigen::Matrix3f::Identity();
     source_orientation_matrix.block<3, 1>(0, 3) = Eigen::Vector3f::Zero();
-    target_translation_matrix = target_orientation_matrix = target;
+    target_translation_matrix = target_orientation_matrix = target_matrix;
     target_translation_matrix.block<3, 3>(0, 0) = Eigen::Matrix3f::Identity();
     target_orientation_matrix.block<3, 1>(0, 3) = Eigen::Vector3f::Zero();
-    relative_matrix = source.inverse() * target;
+    relative_matrix = source_matrix.inverse() * target_matrix;
 
     // Get relative pose
     Pose relative_pose = convert_matrix2pose(relative_matrix);
@@ -350,16 +345,16 @@ void NDTMapper::get_initial_guess(const Eigen::Matrix4f& source, const Eigen::Ma
     // Get destination matrix
     Eigen::Matrix4f destination_matrix =
         rotation_matrix * target_orientation_matrix;
-    destination_matrix(0, 3) = source(0, 3);
-    destination_matrix(1, 3) = source(1, 3);
-    destination_matrix(2, 3) = target(2, 3);
+    destination_matrix(0, 3) = source_matrix(0, 3);
+    destination_matrix(1, 3) = source_matrix(1, 3);
+    destination_matrix(2, 3) = target_matrix(2, 3);
 
     // Get initial guess
-    initial_guess = destination_matrix * source.inverse();
+    initial_guess_matrix = destination_matrix * source_matrix.inverse();
 
     // Print source pose
     Pose source_pose =
-        convert_matrix2pose(source);
+        convert_matrix2pose(source_matrix);
     ROS_INFO("\n-----------------------------------------------------------------");
     ROS_INFO("Source pose:\n %.3f, %.3f, %.3f, %.3f, %.3f, %.3f",
         source_pose.x, source_pose.y, source_pose.z,
@@ -367,7 +362,7 @@ void NDTMapper::get_initial_guess(const Eigen::Matrix4f& source, const Eigen::Ma
 
     // Print target pose
     Pose target_pose =
-        convert_matrix2pose(target);
+        convert_matrix2pose(target_matrix);
     ROS_INFO("Target pose:\n %.3f, %.3f, %.3f, %.3f, %.3f, %.3f",
         target_pose.x, target_pose.y, target_pose.z,
         target_pose.roll*180.0/M_PI, target_pose.pitch*180.0/M_PI, target_pose.yaw*180.0/M_PI);
@@ -380,8 +375,7 @@ void NDTMapper::get_initial_guess(const Eigen::Matrix4f& source, const Eigen::Ma
         initial_guess_pose.roll*180.0/M_PI, initial_guess_pose.pitch*180.0/M_PI, initial_guess_pose.yaw*180.0/M_PI);
 }
 
-// Apply loop closure to the given submaps.
-bool NDTMapper::get_loop_correction(const Eigen::Matrix4f& map2base_matrix, const std::unordered_set<int>& target_id_set, const Eigen::Matrix4f& initial_guess, Eigen::Matrix4f& correction)
+bool NDTMapper::get_loop_correction(const Eigen::Matrix4f& source_matrix, const std::unordered_set<int>& target_id_set, const Eigen::Matrix4f& initial_guess_matrix, Eigen::Matrix4f& correction_matrix)
 {
     // Set target map
     pcl::PointCloud<pcl::PointXYZI> target_cloud;
@@ -395,7 +389,6 @@ bool NDTMapper::get_loop_correction(const Eigen::Matrix4f& map2base_matrix, cons
     pcl::PointCloud<pcl::PointXYZI>::Ptr source_voxel_filtered(new pcl::PointCloud<pcl::PointXYZI>);
     apply_voxel_grid_filter(source_cloud.makeShared(), source_voxel_filtered, voxel_leaf_size_);
     ndt_.setInputSource(source_voxel_filtered);
-    Eigen::Matrix4f source = map2base_matrix * base2lidar_matrix_;
 
     std::vector<Eigen::Matrix4f> correction_vector;
     std::vector<float> fitness_score_vector;
@@ -416,7 +409,7 @@ bool NDTMapper::get_loop_correction(const Eigen::Matrix4f& map2base_matrix, cons
             {
                 if (x == i || y == i || x == -i || y == -i)
                 {
-                    Eigen::Matrix4f shifted_initial_guess = initial_guess;
+                    Eigen::Matrix4f shifted_initial_guess = initial_guess_matrix;
                     shifted_initial_guess(0, 3) += initial_guess_resolution_ * x;
                     shifted_initial_guess(1, 3) += initial_guess_resolution_ * y;
                     initial_guess_vector.push_back(shifted_initial_guess);
@@ -447,7 +440,7 @@ bool NDTMapper::get_loop_correction(const Eigen::Matrix4f& map2base_matrix, cons
         best_convergence = convergence_vector[best_idx];
 
         // Get destination matrix
-        best_destination = best_correction * source;
+        best_destination = best_correction * source_matrix;
 
         // Get destination pose
         Pose best_destination_pose =
@@ -468,12 +461,11 @@ bool NDTMapper::get_loop_correction(const Eigen::Matrix4f& map2base_matrix, cons
     }
 
     // Set correction
-    correction = best_correction;
+    correction_matrix = best_correction;
 
     return true;
 }
 
-// Get node id path from start to goal.
 std::vector<int> NDTMapper::get_loop_id_path(const std::unordered_set<int>& start_id_candidates, const int goal_id)
 {
     int length;
@@ -492,7 +484,6 @@ std::vector<int> NDTMapper::get_loop_id_path(const std::unordered_set<int>& star
     return loop_id_path;
 }
 
-// Get node id path from start to goal with ids in same groups removed.
 std::vector<int> NDTMapper::get_grouped_loop_id_path(const std::vector<int>& loop_id_path)
 {
     std::vector<int> grouped_loop_id_path;
@@ -582,8 +573,7 @@ void NDTMapper::shift_submaps(const std::map<int, Eigen::Matrix4f>& destination_
     }
 }
 
-// Close loop.
-bool NDTMapper::close_loop(const Eigen::Matrix4f& map2base_matrix, const std::unordered_set<int>& loop_target_id_set, Pose& base_pose)
+bool NDTMapper::close_loop(const std::unordered_set<int>& loop_target_id_set, Eigen::Matrix4f& map2base_matrix)
 {
     // Get closest loop target position matrix
     int closest_loop_target_id = *loop_target_id_set.begin();
@@ -604,7 +594,7 @@ bool NDTMapper::close_loop(const Eigen::Matrix4f& map2base_matrix, const std::un
     // Get loop correction
     bool valid_loop_closure;
     Eigen::Matrix4f loop_correction_matrix;
-    valid_loop_closure = get_loop_correction(map2base_matrix, loop_target_id_set, initial_guess_matrix, loop_correction_matrix);
+    valid_loop_closure = get_loop_correction(source_matrix, loop_target_id_set, initial_guess_matrix, loop_correction_matrix);
 
     // Return if loop closure is not valid
     if (!valid_loop_closure)
@@ -651,12 +641,8 @@ bool NDTMapper::close_loop(const Eigen::Matrix4f& map2base_matrix, const std::un
     // Publish loop markers
     publish_loop_markers(target_matrix, initial_guess_matrix * source_matrix, destination_matrix_map);
 
-    // Update base pose
-    Eigen::Matrix4f shifted_map2base_matrix;
-    Pose shifted_map2base_pose;
-    shifted_map2base_matrix = destination_matrix_map.rbegin()->second * lidar2base_matrix_;
-    shifted_map2base_pose = convert_matrix2pose(shifted_map2base_matrix);
-    base_pose = last_base_pose_ = shifted_map2base_pose;
+    // Update map2base matrix
+    map2base_matrix = destination_matrix_map.rbegin()->second * lidar2base_matrix_;
 
     // Get loop correction distance
     Pose loop_correction_pose =
@@ -692,8 +678,7 @@ bool NDTMapper::close_loop(const Eigen::Matrix4f& map2base_matrix, const std::un
     return true;
 }
 
-// Update maps.
-void NDTMapper::update_maps(const pcl::PointCloud<pcl::PointXYZI>::Ptr& scan_for_mapping, const Eigen::Matrix4f& map2base_matrix, Pose& base_pose)
+void NDTMapper::update_maps(const pcl::PointCloud<pcl::PointXYZI>::Ptr& scan_for_mapping, Eigen::Matrix4f& map2base_matrix, Pose& base_pose)
 {
     // Add scan to maps
     submap_.operator+=(*scan_for_mapping);
@@ -745,8 +730,11 @@ void NDTMapper::update_maps(const pcl::PointCloud<pcl::PointXYZI>::Ptr& scan_for
             if (loop_target_id_set.size() > 0)
             {
                 attempting_loop_closure_ = true;
-                adjusted_loop_with_last_scan_ = close_loop(map2base_matrix, loop_target_id_set, base_pose);
+                adjusted_loop_with_last_scan_ = close_loop(loop_target_id_set, map2base_matrix);
             }
+
+            if (adjusted_loop_with_last_scan_)
+                base_pose = last_base_pose_ = convert_matrix2pose(map2base_matrix);
         }
         else
             target_id_set = get_neighbor_ids(submap_map_, submap_include_distance_);
@@ -774,7 +762,6 @@ void NDTMapper::update_maps(const pcl::PointCloud<pcl::PointXYZI>::Ptr& scan_for
     ndt_.setInputTarget(target_map_.makeShared());
 }
 
-// Callback for odometry messages
 void NDTMapper::odom_callback(const nav_msgs::OdometryConstPtr& msg)
 {
     if (!odom_initialized_)
@@ -801,7 +788,6 @@ void NDTMapper::odom_callback(const nav_msgs::OdometryConstPtr& msg)
     last_odom_ = *msg;
 }
 
-// Callback for point cloud messages
 void NDTMapper::points_callback(const sensor_msgs::PointCloud2ConstPtr& msg)
 {
     if (!ros::ok())
@@ -1027,7 +1013,6 @@ void NDTMapper::points_callback(const sensor_msgs::PointCloud2ConstPtr& msg)
     last_predicted_base_pose_ = base_pose;
 }
 
-// Callback for map save request message.
 void NDTMapper::map_save_request_callback(const std_msgs::StringConstPtr& msg)
 {
     if (!ros::ok())

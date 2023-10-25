@@ -29,7 +29,14 @@
 class NDTMapper
 {
 public:
+    /**
+     * \brief Constructor
+    */
     NDTMapper();
+
+    /**
+     * \brief Destructor
+    */
     ~NDTMapper();
 
 private:
@@ -115,22 +122,122 @@ private:
 
     PredictionMethod prediction_method_;
 
-    std::unordered_set<int> get_locally_connected_ids(const int, const float);
-    void group_submaps(const std::unordered_set<int>&);
+    /** 
+     * \brief Gets connected submap ids in pose graph within the specified distance.
+     * \param target_id The target submap id.
+     * \param include_distance The distance to include submaps.
+     * \return The set of connected submap ids.
+     */
+    std::unordered_set<int> get_locally_connected_ids(const int target_id, const float include_distance);
+
+    /** 
+     * \brief Groups the given submap ids.
+     * \param connected_id_set The set of submap ids to group.
+     */
+    void group_submaps(const std::unordered_set<int>& connected_id_set);
+
+    /** 
+     * \brief Publishes markers of loop closure.
+     * \param target_matrix The target submap position for loop closure.
+     * \param guess_matrix The initial guess matrix for localization.
+     * \param destination_matrix_map The submap positions of the entire loop.
+     */
     void publish_loop_markers(const Eigen::Matrix4f& target_matrix, const Eigen::Matrix4f& guess_matrix, const std::map<int, Eigen::Matrix4f>& destination_matrix_map);
-    std::unordered_set<int> get_loop_target_ids(const std::unordered_set<int>&);
-    void get_initial_guess(const Eigen::Matrix4f& source, const Eigen::Matrix4f& target, Eigen::Matrix4f& initial_guess);
-    bool get_loop_correction(const Eigen::Matrix4f& map2base_matrix, const std::unordered_set<int>& target_id_set, const Eigen::Matrix4f& initial_guess, Eigen::Matrix4f& correction);
-    std::vector<int> get_loop_id_path(const std::unordered_set<int>&, const int);
+
+    /** 
+     * \brief Gets the target submap ids for loop closure.
+     * \param connected_id_set The set of connected submap ids to exclude.
+     * \return The set of target submap ids.
+     */
+    std::unordered_set<int> get_loop_target_ids(const std::unordered_set<int>& connected_id_set);
+
+    /** 
+     * \brief Gets the initial guess matrix for loop closure.
+     * \param source_matrix The source matrix.
+     * \param target_matrix The target matrix.
+     * \param initial_guess_matrix The initial guess matrix for localization.
+     */
+    void get_initial_guess(const Eigen::Matrix4f& source_matrix, const Eigen::Matrix4f& target_matrix, Eigen::Matrix4f& initial_guess_matrix);
+
+    /** 
+     * \brief Gets the loop closure correction matrix.
+     * \param source_matrix The source matrix.
+     * \param target_id_set The set of target submap ids to use for loop closure localization.
+     * \param initial_guess_matrix The initial guess matrix for localization.
+     * \param correction_matrix The loop closure correction matrix.
+     * \return True if an acceptable correction is found.
+     */
+    bool get_loop_correction(const Eigen::Matrix4f& source_matrix, const std::unordered_set<int>& target_id_set, const Eigen::Matrix4f& initial_guess_matrix, Eigen::Matrix4f& correction_matrix);
+
+    /** 
+     * \brief Gets the submap id path from start to goal.
+     * \param start_id_candidates The candidate set of submap ids of start.
+     * \param goal_id The goal submap id.
+     * \return The submap id path from start to goal.
+     */
+    std::vector<int> get_loop_id_path(const std::unordered_set<int>& start_id_candidates, const int goal_id);
+
+    /** 
+     * \brief Removes submap ids from same groups.
+     * \param id_path The submap id path from start to goal.
+     * \return The grouped submap id path from start to goal.
+     */
     std::vector<int> get_grouped_loop_id_path(const std::vector<int>&);
-    void adjust_angles(const Eigen::Matrix4f&, std::map<int, Eigen::Matrix4f>&);
-    void adjust_positions(const Eigen::Matrix4f&, std::map<int, Eigen::Matrix4f>&);
-    void shift_submaps(const std::map<int, Eigen::Matrix4f>&);
-    bool close_loop(const Eigen::Matrix4f& map2base_matrix, const std::unordered_set<int>& loop_target_id_set, Pose& base_pose);
-    void update_maps(const pcl::PointCloud<pcl::PointXYZI>::Ptr&, const Eigen::Matrix4f&, Pose&);
-    void odom_callback(const nav_msgs::OdometryConstPtr&);
-    void points_callback(const sensor_msgs::PointCloud2ConstPtr&);
-    void map_save_request_callback(const std_msgs::StringConstPtr&);
+
+    /** 
+     * \brief Adjusts the submap angles of the given submap id path.
+     * \param loop_correction_matrix The loop closure correction matrix.
+     * \param destination_matrix_map The destinations for each submap of the entire loop.
+     */
+    void adjust_angles(const Eigen::Matrix4f& loop_correction_matrix, std::map<int, Eigen::Matrix4f>& destination_matrix_map);
+
+    /**
+     * \brief Adjusts the submap positions of the given submap id path.
+     * \param loop_correction_matrix The loop closure correction matrix.
+     * \param destination_matrix_map The destinations for each submap of the entire loop.
+    */
+    void adjust_positions(const Eigen::Matrix4f& loop_correction_matrix, std::map<int, Eigen::Matrix4f>& destination_matrix_map);
+
+    /** 
+     * \brief Shifts the submap point clouds of the given submap id path.
+     * \param destination_matrix_map The destinations for each submap of the entire loop.
+     */
+    void shift_submaps(const std::map<int, Eigen::Matrix4f>& destination_matrix_map);
+
+    /** 
+     * \brief Attempts to close the loop with the given submap id set.
+     * \param map2base_matrix The map to base transform matrix.
+     * \param loop_target_id_set The set of target submap ids to use for loop closure localization.
+     * \return True if loop closure was attempted.
+     */
+    bool close_loop(const std::unordered_set<int>& loop_target_id_set, Eigen::Matrix4f& map2base_matrix);
+
+    /** 
+     * \brief Updates submap and target map with the given scan.
+     * \param scan_for_mapping The scan to update the maps.
+     * \param map2base_matrix The map to base transform matrix.
+     * \param base_pose The map to base transform pose.
+     * \return True if loop closure was attempted.
+     */
+    void update_maps(const pcl::PointCloud<pcl::PointXYZI>::Ptr& scan_for_mapping, Eigen::Matrix4f& map2base_matrix, Pose& base_pose);
+
+    /** 
+     * \brief Executed when a odom topic is received.
+     * \param msg The received message.
+     */
+    void odom_callback(const nav_msgs::OdometryConstPtr& msg);
+
+    /** 
+     * \brief Executed when a point cloud topic is received.
+     * \param msg The received message.
+     */
+    void points_callback(const sensor_msgs::PointCloud2ConstPtr& msg);
+
+    /** 
+     * \brief Executed when a map save request topic is received.
+     * \param msg The received message.
+     */
+    void map_save_request_callback(const std_msgs::StringConstPtr& msg);
 };
 
 #endif // NDT_MAPPER_HPP_
