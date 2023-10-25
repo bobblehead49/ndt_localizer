@@ -103,7 +103,7 @@ private:
     void init_pose_callback(const geometry_msgs::PoseWithCovarianceStamped::ConstPtr &msg);
 
     /**
-     * \brief Executed when a points topic is received.
+     * \brief Executed when a point cloud topic is received.
      * \param msg The received message.
      */
     void points_callback(const sensor_msgs::PointCloud2::ConstPtr &msg);

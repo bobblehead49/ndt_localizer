@@ -12,7 +12,14 @@
 class NDTLogger
 {
 public:
+    /**
+     * @brief Constructor
+     */
     NDTLogger();
+
+    /**
+     * @brief Destructor
+     */
     ~NDTLogger();
 
 private:
@@ -30,8 +37,17 @@ private:
 
     std::queue<ros::Time> process_time_queue_;
 
-    void queue_callback(const sensor_msgs::PointCloud2::ConstPtr&);
-    void deque_callback(const std_msgs::Empty::ConstPtr&);
+    /**
+     * @brief Executed when a point cloud topic is received. This method is used to calculate ETA.
+     * @param msg The received message.
+     */
+    void queue_callback(const sensor_msgs::PointCloud2::ConstPtr& msg);
+
+    /**
+     * @brief Executed when a empty topic is received. This method is used to calculate ETA.
+     * @param msg The received message.
+     */
+    void deque_callback(const std_msgs::Empty::ConstPtr& msg);
 };
 
 #endif // NDT_LOGGER_HPP_

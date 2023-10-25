@@ -7,7 +7,6 @@
 #include <sensor_msgs/PointCloud2.h>
 
 
-// Constructor
 NDTLogger::NDTLogger(): nh_(""), pnh_("~")
 {
     // Get parameters
@@ -23,16 +22,13 @@ NDTLogger::NDTLogger(): nh_(""), pnh_("~")
     deque_sub_ = nh_.subscribe(deque_topic_, 10000, &NDTLogger::deque_callback, this);
 }
 
-// Destructor
 NDTLogger::~NDTLogger(){}
 
-// Callback for points
 void NDTLogger::queue_callback(const sensor_msgs::PointCloud2::ConstPtr& msg)
 {
     queue_count_++;
 }
 
-// Callback for map
 void NDTLogger::deque_callback(const std_msgs::Empty::ConstPtr& msg)
 {
     deque_count_++;
