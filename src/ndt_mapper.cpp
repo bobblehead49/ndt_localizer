@@ -617,13 +617,6 @@ bool NDTMapper::close_loop(const std::unordered_set<int>& loop_target_id_set, Ei
     for (auto id : grouped_loop_id_path)
         destination_matrix_map.insert(std::make_pair(id, submap_map_[id].position_matrix * base2lidar_matrix_));
 
-    // Print final destination pose
-    Pose final_destination_pose =
-        convert_matrix2pose(final_destination_matrix);
-    ROS_INFO("Final destination pose:\n %.3f, %.3f, %.3f, %.3f, %.3f, %.3f", 
-        final_destination_pose.x, final_destination_pose.y, final_destination_pose.z,
-        final_destination_pose.roll*180.0/M_PI, final_destination_pose.pitch*180.0/M_PI, final_destination_pose.yaw*180.0/M_PI);
-
     // Adjust angles of destination matrices
     Eigen::Matrix4f angle_correction_matrix = 
         final_destination_matrix * source_matrix.inverse();
