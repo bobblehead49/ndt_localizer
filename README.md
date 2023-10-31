@@ -2,7 +2,7 @@
 
 ## Overview
 This package is for **3D mapping and localization using NDT** (normal-distributions transform).
-Includes a simple **loop closure** feature without any total optimization.  
+Includes a simple **loop closure** feature without any total optimization. Multiprocessing NDT is available using [ndt_omp](https://github.com/koide3/ndt_omp#ndt_omp).
 
 This package has been developed and tested under **ROS noetic** on **Ubuntu 20.04**.  
 
@@ -10,14 +10,22 @@ This package has been developed and tested under **ROS noetic** on **Ubuntu 20.0
 
 https://github.com/bobblehead49/ndt_localizer/assets/85610470/6e9ebc63-43fb-465c-b07b-4efb202852db
 
----
-
-## Usage
-
 ### Necessary topics
 - sensor_msgs/PointCloud2 : 3D LiDAR scan data
 - tf2_msgs/TFMessage : transform info between robot's origin and lidar
 - nav_msgs/Odometry : (optional) can be used for initial guess of next scan
+
+### Optional packages
+Clone [ndt_omp](https://github.com/koide3/ndt_omp) in your ROS workspace for OpenMP acceleration of NDT calculations.  
+```bash
+git clone https://github.com/koide3/ndt_omp
+```
+After that, please clean and re-build this package (or your entire workspace) to apply changes.  
+OpenMP will automatically be used after installation and rebuild.
+
+---
+
+## Usage
 
 ### Mapping
 1. Launch mapping nodes.
@@ -62,6 +70,8 @@ https://github.com/bobblehead49/ndt_localizer/assets/85610470/6e9ebc63-43fb-465c
     |loop_confirmation_rotation_tolerance       |maximum rotation error for the loop closure to be considered as having converged [deg]                     |
     |save_uncompressed_map                      |true to save the full map to a pcd file with no binary compression                                         |
     |save_submaps                               |true to save each submap as a single pcd file                                                              |
+    |openmp_thread_num                          |number of threads when using OpenMP [-]                                                                    |
+    |openmp_neighbor_search_method              |method to get neighbor voxels for ndt gradient calculation; 0: KDTREE, 1: DIRECT26, 2: DIRECT7, 3: DIRECT1. For further information, check [ndt_omp](https://github.com/koide3/ndt_omp#ndt_omp). |
     |use_rviz                                   |true to launch rviz                                                                                        |
 
 - launch arguments for `map_saver.launch`
@@ -103,4 +113,6 @@ https://github.com/bobblehead49/ndt_localizer/assets/85610470/6e9ebc63-43fb-465c
     |use_submaps                                |true to use submaps for localization                                                                       |
     |submap_include_distance                    |submaps within this distance will be added to the target map for localization [m]                          |
     |submap_update_shift                        |minimal shift length for the target map to be updated [m]                                                  |
+    |openmp_thread_num                          |number of threads when using OpenMP [-]                                                                    |
+    |openmp_neighbor_search_method              |method to get neighbor voxels for ndt gradient calculation; 0: KDTREE, 1: DIRECT26, 2: DIRECT7, 3: DIRECT1. For further information, check [ndt_omp](https://github.com/koide3/ndt_omp#ndt_omp). |
     |use_rviz                                   |true to launch rviz                                                                                        |
