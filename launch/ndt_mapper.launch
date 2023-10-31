@@ -30,6 +30,8 @@
     <arg name="loop_confirmation_rotation_tolerance" default="0.50"/>
     <arg name="save_uncompressed_map" default="true"/>
     <arg name="save_submaps" default="true"/>
+    <arg name="openmp_thread_num" default="16"/>
+    <arg name="openmp_neighbor_search_method" default="2"/> <!-- 0: KDTREE, 1: DIRECT26, 2: DIRECT7, 3: DIRECT1 -->
     <arg name="use_rviz" default="true"/>
 
     <node pkg="rviz" type="rviz" name="rviz" args="-d $(dirname)/../config/mapping.rviz" if="$(arg use_rviz)" />
@@ -64,6 +66,8 @@
         <param name="loop_confirmation_rotation_tolerance" value="$(arg loop_confirmation_rotation_tolerance)"/>
         <param name="save_uncompressed_map" value="$(arg save_uncompressed_map)"/>
         <param name="save_submaps" value="$(arg save_submaps)"/>
+        <param name="openmp_thread_num" value="$(arg openmp_thread_num)"/>
+        <param name="openmp_neighbor_search_method" value="$(arg openmp_neighbor_search_method)"/>
     </node>
 
     <node pkg="ndt_localizer" type="ndt_logger" name="ndt_logger" output="screen" >

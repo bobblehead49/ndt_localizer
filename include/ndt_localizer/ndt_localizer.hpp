@@ -17,6 +17,10 @@
 #include <tf2_ros/transform_listener.h>
 #include <tf2_ros/transform_broadcaster.h>
 
+#if USE_OPENMP_PCL==1
+#include <pclomp/ndt_omp.h>
+#endif
+
 
 class NDTLocalizer
 {
@@ -80,7 +84,12 @@ private:
     Eigen::Matrix4f lidar2base_matrix_;
 
     pcl::PointCloud<pcl::PointXYZI> target_map_;
+
+#if USE_OPENMP_PCL == 1
+    pclomp::NormalDistributionsTransform<pcl::PointXYZI, pcl::PointXYZI> ndt_;
+#elif USE_OPENMP_PCL == 0
     pcl::NormalDistributionsTransform<pcl::PointXYZI, pcl::PointXYZI> ndt_;
+#endif
 
     std::map<int, SubmapWithInfo> submap_map_;
 

@@ -36,12 +36,16 @@
 #include <tf2_eigen/tf2_eigen.h>
 #include <tf2_geometry_msgs/tf2_geometry_msgs.h>
 
+#if USE_OPENMP_PCL==1
+#include <pclomp/ndt_omp.h>
+#endif
+
 
 NDTMapper::NDTMapper() : nh_(), pnh_("~"), tf_listener_(tf_buffer_)
 {
     // Get parameters
     std::string prediction_method_str;
-    int ndt_max_iterations;
+    int ndt_max_iterations, openmp_thread_num, openmp_neighbor_search_method;
     float ndt_resolution, ndt_step_size, ndt_transformation_epsilon;
     float roation_error_tolerance_deg, loop_confirmation_rotation_tolerance_deg;
     pnh_.param<std::string>("map_frame", map_frame_, "map");
@@ -73,6 +77,8 @@ NDTMapper::NDTMapper() : nh_(), pnh_("~"), tf_listener_(tf_buffer_)
     pnh_.param<float>("loop_confirmation_rotation_tolerance", loop_confirmation_rotation_tolerance_deg, 0.1);
     pnh_.param<bool>("save_uncompressed_map", save_uncompressed_map_, true);
     pnh_.param<bool>("save_submaps", save_submaps_, true);
+    pnh_.param<int>("openmp_thread_num", openmp_thread_num, 16);
+    pnh_.param<int>("openmp_neighbor_search_method", openmp_neighbor_search_method, 2);
 
     // Convert parameters
     prediction_method_ = convert_prediction_method(prediction_method_str);
@@ -97,6 +103,19 @@ NDTMapper::NDTMapper() : nh_(), pnh_("~"), tf_listener_(tf_buffer_)
     last_base_twist_.linear.x = last_base_twist_.linear.y = last_base_twist_.linear.z = 0;
     last_base_twist_.angular.x = last_base_twist_.angular.y = last_base_twist_.angular.z = 0;
 
+    // Setup ndt
+#if USE_OPENMP_PCL == 1
+    ndt_.setNumThreads(openmp_thread_num);
+    ndt_.setNeighborhoodSearchMethod(static_cast<pclomp::NeighborSearchMethod>(openmp_neighbor_search_method));
+    ROS_INFO("Using OpenMP with %d threads.", openmp_thread_num);
+#elif USE_OPENMP_PCL == 0
+    ROS_INFO("Not using OpenMP.");
+#endif
+    ndt_.setResolution(ndt_resolution);
+    ndt_.setStepSize(ndt_step_size);
+    ndt_.setTransformationEpsilon(ndt_transformation_epsilon);
+    ndt_.setMaximumIterations(ndt_max_iterations);
+
     // Get static transforms
     ros::Rate wait_rate(2);
     geometry_msgs::TransformStamped base2lidar_tf;
@@ -104,12 +123,6 @@ NDTMapper::NDTMapper() : nh_(), pnh_("~"), tf_listener_(tf_buffer_)
         wait_rate.sleep();
     base2lidar_matrix_ = convert_tf2matrix(base2lidar_tf);
     lidar2base_matrix_ = base2lidar_matrix_.inverse();
-
-    // Setup ndt
-    ndt_.setResolution(ndt_resolution);
-    ndt_.setStepSize(ndt_step_size);
-    ndt_.setTransformationEpsilon(ndt_transformation_epsilon);
-    ndt_.setMaximumIterations(ndt_max_iterations);
 
     // Setup subscribers and publishers
     points_sub_ = nh_.subscribe(points_topic_, 1000000, &NDTMapper::points_callback, this);

@@ -25,6 +25,10 @@
 #include <tf2_ros/transform_listener.h>
 #include <tf2_ros/transform_broadcaster.h>
 
+#if USE_OPENMP_PCL==1
+#include <pclomp/ndt_omp.h>
+#endif
+
 
 class NDTMapper
 {
@@ -108,7 +112,12 @@ private:
 
     pcl::PointCloud<pcl::PointXYZI> submap_;
     pcl::PointCloud<pcl::PointXYZI> target_map_;
+
+#if USE_OPENMP_PCL == 1
+    pclomp::NormalDistributionsTransform<pcl::PointXYZI, pcl::PointXYZI> ndt_;
+#elif USE_OPENMP_PCL == 0
     pcl::NormalDistributionsTransform<pcl::PointXYZI, pcl::PointXYZI> ndt_;
+#endif
 
     Pose last_base_pose_;
     Pose last_added_base_pose_;

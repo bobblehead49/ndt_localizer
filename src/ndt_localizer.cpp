@@ -25,12 +25,16 @@
 #include <tf2_ros/transform_listener.h>
 #include <tf2_geometry_msgs/tf2_geometry_msgs.h>
 
+#if USE_OPENMP_PCL==1
+#include <pclomp/ndt_omp.h>
+#endif
+
 
 NDTLocalizer::NDTLocalizer() : nh_(), pnh_("~"), tf_listener_(tf_buffer_)
 {
     // Get parameters
     std::string maps_dir, map_name, prediction_method_str;
-    int ndt_max_iterations;
+    int ndt_max_iterations, openmp_thread_num, openmp_neighbor_search_method;
     float ndt_resolution, ndt_step_size, ndt_transformation_epsilon;
     float rotation_error_tolerance_deg;
     pnh_.param<std::string>("maps_directory", maps_dir, "./");
@@ -53,6 +57,8 @@ NDTLocalizer::NDTLocalizer() : nh_(), pnh_("~"), tf_listener_(tf_buffer_)
     pnh_.param<bool>("use_submaps", use_submaps_, true);
     pnh_.param<float>("submap_include_distance", submap_include_distance_, 30.0);
     pnh_.param<float>("submap_update_shift", submap_update_shift_, 5.0);
+    pnh_.param<int>("openmp_thread_num", openmp_thread_num, 16);
+    pnh_.param<int>("openmp_neighbor_search_method", openmp_neighbor_search_method, 2);
 
     // Convert parameters
     prediction_method_ = convert_prediction_method(prediction_method_str);
@@ -69,6 +75,13 @@ NDTLocalizer::NDTLocalizer() : nh_(), pnh_("~"), tf_listener_(tf_buffer_)
     last_base_twist_.angular.x = last_base_twist_.angular.y = last_base_twist_.angular.z = 0;
 
     // Setup ndt
+#if USE_OPENMP_PCL == 1
+    ndt_.setNumThreads(openmp_thread_num);
+    ndt_.setNeighborhoodSearchMethod(static_cast<pclomp::NeighborSearchMethod>(openmp_neighbor_search_method));
+    ROS_INFO("Using OpenMP with %d threads.", openmp_thread_num);
+#elif USE_OPENMP_PCL == 0
+    ROS_INFO("Not using OpenMP.");
+#endif
     ndt_.setResolution(ndt_resolution);
     ndt_.setStepSize(ndt_step_size);
     ndt_.setTransformationEpsilon(ndt_transformation_epsilon);

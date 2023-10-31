@@ -17,6 +17,18 @@ find_package(catkin REQUIRED COMPONENTS
   tf2_ros
 )
 
+find_package(ndt_omp QUIET)
+
+if (NOT ndt_omp_FOUND)
+  message(WARNING
+    " The ndt_omp package was not found.\n"
+    " To enable multiprocessing NDT using OpenMP, install package from\n \n"
+    " \thttps://github.com/koide3/ndt_omp.git\n \n"
+    " After installation, please clean and re-build this package.\n"
+    " The ndt_omp package is optional, and without it, NDT will run with the single-threaded PCL implementation."
+  )
+endif()
+
 find_package(PCL REQUIRED COMPONENTS
   io
 )
@@ -30,6 +42,8 @@ catkin_package()
 include_directories(
   include
   ${catkin_INCLUDE_DIRS}
+  ${ndt_omp_INCLUDE_DIRS}
+  ${PCL_INCLUDE_DIRS}
 )
 
 add_library(pose_graph src/pose_graph.cpp)
@@ -40,12 +54,22 @@ add_executable(ndt_mapper src/ndt_mapper.cpp)
 add_executable(ndt_logger src/ndt_logger.cpp)
 add_executable(map_saver src/map_saver.cpp)
 
+if (ndt_omp_FOUND)
+  target_compile_definitions(ndt_localizer PRIVATE USE_OPENMP_PCL=1)
+  target_compile_definitions(ndt_mapper PRIVATE USE_OPENMP_PCL=1)
+else()
+  target_compile_definitions(ndt_localizer PRIVATE USE_OPENMP_PCL=0)
+  target_compile_definitions(ndt_mapper PRIVATE USE_OPENMP_PCL=0)
+endif()
+
 target_link_libraries(ndt_localizer
   ${catkin_LIBRARIES}
+  ${ndt_omp_LIBRARIES}
   ndt_tools
 )
 target_link_libraries(ndt_mapper
   ${catkin_LIBRARIES}
+  ${ndt_omp_LIBRARIES}
   pose_graph
   ndt_tools
 )

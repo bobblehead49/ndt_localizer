@@ -19,6 +19,8 @@
     <arg name="use_submaps" default="true"/>
     <arg name="submap_include_distance" default="30.0"/>
     <arg name="submap_update_shift" default="5.0"/>
+    <arg name="openmp_thread_num" default="16"/>
+    <arg name="openmp_neighbor_search_method" default="2"/> <!-- 0: KDTREE, 1: DIRECT26, 2: DIRECT7, 3: DIRECT1 -->
     <arg name="use_rviz" default="true"/>
 
     <node pkg="rviz" type="rviz" name="rviz" args="-d $(find ndt_localizer)/config/localization.rviz" if="$(arg use_rviz)" />
@@ -44,5 +46,7 @@
         <param name="use_submaps" value="$(arg use_submaps)"/>
         <param name="submap_include_distance" value="$(arg submap_include_distance)"/>
         <param name="submap_update_shift" value="$(arg submap_update_shift)"/>
+        <param name="openmp_thread_num" value="$(arg openmp_thread_num)"/>
+        <param name="openmp_neighbor_search_method" value="$(arg openmp_neighbor_search_method)"/>
     </node>
 </launch>
