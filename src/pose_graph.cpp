@@ -1,3 +1,7 @@
+// Copyright (c) 2023 Kosuke Suzuki
+// Released under the MIT license
+// https://opensource.org/licenses/mit-license.php
+
 #include <pose_graph/pose_graph.hpp>
 
 #include <unordered_map>

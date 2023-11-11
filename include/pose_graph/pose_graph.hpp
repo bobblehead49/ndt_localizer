@@ -1,5 +1,9 @@
-# ifndef POSE_GRAPH_HPP_
-# define POSE_GRAPH_HPP_
+// Copyright (c) 2023 Kosuke Suzuki
+// Released under the MIT license
+// https://opensource.org/licenses/mit-license.php
+
+#ifndef POSE_GRAPH_HPP_
+#define POSE_GRAPH_HPP_
 
 #include <unordered_map>
 #include <unordered_set>
