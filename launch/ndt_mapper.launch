@@ -12,6 +12,7 @@
     <arg name="odom_topic" default="/odom"/>
     <arg name="map_topic" default="/map"/>
     <arg name="map_publish_interval" default="15.0"/>
+    <arg name="pcd_dense_option" default="false"/>
     <arg name="min_scan_range" default="0.3"/>
     <arg name="max_scan_range" default="200.0"/>
     <arg name="voxel_leaf_size" default="0.5"/>
@@ -48,6 +49,7 @@
         <param name="odom_topic" value="$(arg odom_topic)"/>
         <param name="map_topic" value="$(arg map_topic)"/>
         <param name="map_publish_interval" value="$(arg map_publish_interval)"/>
+        <param name="pcd_dense_option" value="$(arg pcd_dense_option)"/>
         <param name="min_scan_range" value="$(arg min_scan_range)"/>
         <param name="max_scan_range" value="$(arg max_scan_range)"/>
         <param name="voxel_leaf_size" value="$(arg voxel_leaf_size)"/>

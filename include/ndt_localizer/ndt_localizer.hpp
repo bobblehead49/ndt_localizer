@@ -74,6 +74,7 @@ private:
     bool points_initialized_;
     bool odom_initialized_;
     bool pose_initialized_;
+    bool pcd_dense_option_;
     bool use_submaps_;
 
     float min_scan_range_;

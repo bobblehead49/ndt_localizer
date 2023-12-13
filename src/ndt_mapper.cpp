@@ -59,6 +59,7 @@ NDTMapper::NDTMapper() : nh_(), pnh_("~"), tf_listener_(tf_buffer_)
     pnh_.param<std::string>("odom_topic", odom_topic_, "/odom");
     pnh_.param<std::string>("map_topic", map_topic_, "/map");
     pnh_.param<float>("map_publish_interval", map_publish_interval_, 15.0);
+    pnh_.param<bool>("pcd_dense_option", pcd_dense_option_, false);
     pnh_.param<float>("min_scan_range", min_scan_range_, 0.3);
     pnh_.param<float>("max_scan_range", max_scan_range_, 200.0);
     pnh_.param<float>("voxel_leaf_size", voxel_leaf_size_, 0.5);
@@ -818,6 +819,9 @@ void NDTMapper::points_callback(const sensor_msgs::PointCloud2ConstPtr& msg)
 
     // Convert scan data
     pcl::fromROSMsg(*msg, *scan);
+
+    // Overwrite pcd dense option
+    scan->is_dense = pcd_dense_option_;
 
     // Apply range filter
     apply_range_filter(scan, scan_filtered, min_scan_range_, max_scan_range_);

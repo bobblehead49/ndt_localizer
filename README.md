@@ -48,6 +48,7 @@ OpenMP will automatically be used after installation and rebuild.
     |odom_topic                                 |topic name to subscribe odometry                                                                           |
     |map_topic                                  |topic name to publish created map                                                                          |
     |map_publish_interval                       |minimal interval to publish the full map [sec]                                                             |
+    |pcd_dense_option                           |sets scan pcd's "is_dense" option to this bool                                                             |
     |min_scan_range                             |minimal scan range [m]                                                                                     |
     |max_scan_range                             |maximum scan range [m]                                                                                     |
     |voxel_leaf_size                            |voxel leaf size for scan [m]                                                                               |
@@ -100,6 +101,7 @@ OpenMP will automatically be used after installation and rebuild.
     |lidar_frame                                |frame name of lidar                                                                                        |
     |points_topic                               |topic name to subscribe lidar points                                                                       |
     |odom_topic                                 |topic name to subscribe odometry                                                                           |
+    |pcd_dense_option                           |sets scan pcd's "is_dense" option to this bool                                                             |
     |min_scan_range                             |minimal scan range [m]                                                                                     |
     |max_scan_range                             |maximum scan range [m]                                                                                     |
     |voxel_leaf_size                            |voxel leaf size for scan [m]                                                                               |

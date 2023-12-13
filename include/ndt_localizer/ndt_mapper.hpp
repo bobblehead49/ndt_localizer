@@ -85,6 +85,7 @@ private:
 
     bool odom_initialized_;
     bool map_initialized_;
+    bool pcd_dense_option_;
     bool use_loop_closure_;
     bool adjusted_loop_with_last_scan_;
     bool attempting_loop_closure_;
